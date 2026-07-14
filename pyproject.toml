@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "jsonschema-fast"
-version = "4.26.2"
+version = "1.0.0"
 description = "A fast, Rust-accelerated hybrid implementation of JSON Schema validation for Python"
 readme = "README.md"
 requires-python = ">=3.10"

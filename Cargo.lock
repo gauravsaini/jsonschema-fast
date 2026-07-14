@@ -497,7 +497,7 @@ dependencies = [
 
 [[package]]
 name = "jsonschema_rust"
-version = "4.26.2"
+version = "1.0.0"
 dependencies = [
  "jsonschema",
  "pyo3",
