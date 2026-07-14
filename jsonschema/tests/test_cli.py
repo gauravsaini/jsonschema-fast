@@ -881,7 +881,10 @@ class TestParser(TestCase):
 
 class TestCLIIntegration(TestCase):
     def test_license(self):
-        our_metadata = metadata.metadata("jsonschema")
+        try:
+            our_metadata = metadata.metadata("jsonschema")
+        except metadata.PackageNotFoundError:
+            our_metadata = metadata.metadata("jsonschema-fast")
         self.assertEqual(our_metadata.get("License-Expression"), "MIT")
 
     def test_version(self):
@@ -890,7 +893,11 @@ class TestCLIIntegration(TestCase):
             stderr=subprocess.STDOUT,
         )
         version = version.decode("utf-8").strip()
-        self.assertEqual(version, metadata.version("jsonschema"))
+        try:
+            expected_version = metadata.version("jsonschema")
+        except metadata.PackageNotFoundError:
+            expected_version = metadata.version("jsonschema-fast")
+        self.assertEqual(version, expected_version)
 
     def test_no_arguments_shows_usage_notes(self):
         output = subprocess.check_output(

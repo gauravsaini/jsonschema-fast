@@ -119,7 +119,15 @@ exclude = ["jsonschema/benchmarks/*"]
 
 [tool.ruff]
 line-length = 79
-extend-exclude = ["json"]
+extend-exclude = [
+  "json",
+  "test_rust_poc.py",
+  "benchmark_invalid.py",
+  "benchmark_large.py",
+  "benchmark_perf.py",
+  "benchmark_pyperf.py",
+  "benchmark_rust_poc.py",
+]
 
 [tool.ruff.lint]
 select = ["ALL"]

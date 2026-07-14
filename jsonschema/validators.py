@@ -288,11 +288,11 @@ def create(
                 resolver_arg = changes.get("_resolver")
                 if len(changes) == 1 and schema_arg is not None:
                     cache_key = id(schema_arg)
-                elif len(changes) == 2 and schema_arg is not None and resolver_arg is not None:
+                elif len(changes) == 2 and schema_arg is not None and resolver_arg is not None:  # noqa: E501, PLR2004
                     cache_key = (id(schema_arg), id(resolver_arg))
                 else:
                     cache_key = tuple(
-                        (k, v if isinstance(v, (str, int, float, bool, type(None), tuple)) else id(v))
+                        (k, v if isinstance(v, (str, int, float, bool, type(None), tuple)) else id(v))  # noqa: E501
                         for k, v in sorted(changes.items())
                     )
 
@@ -384,11 +384,11 @@ def create(
             resolver_arg = changes.get("_resolver")
             if len(changes) == 1 and schema_arg is not None:
                 cache_key = id(schema_arg)
-            elif len(changes) == 2 and schema_arg is not None and resolver_arg is not None:
+            elif len(changes) == 2 and schema_arg is not None and resolver_arg is not None:  # noqa: E501, PLR2004
                 cache_key = (id(schema_arg), id(resolver_arg))
             else:
                 cache_key = tuple(
-                    (k, v if isinstance(v, (str, int, float, bool, type(None), tuple)) else id(v))
+                    (k, v if isinstance(v, (str, int, float, bool, type(None), tuple)) else id(v))  # noqa: E501
                     for k, v in sorted(changes.items())
                 )
 
@@ -410,7 +410,13 @@ def create(
             if (
                 _schema is None
                 and jsonschema_rust is not None
-                and self.__class__.__name__ in ("Draft4Validator", "Draft6Validator", "Draft7Validator", "Draft201909Validator", "Draft202012Validator")
+                and self.__class__.__name__ in (
+                    "Draft4Validator",
+                    "Draft6Validator",
+                    "Draft7Validator",
+                    "Draft201909Validator",
+                    "Draft202012Validator",
+                )
                 and self.__class__.__module__ == "jsonschema.validators"
                 and self._ref_resolver is None
                 and self.format_checker is None
@@ -418,16 +424,21 @@ def create(
                     self._registry is _REMOTE_WARNING_REGISTRY
                     or not (
                         isinstance(self.schema, dict)
-                        and any(r in str(self.schema) for r in ("$ref", "$recursiveRef", "$dynamicRef"))
+                        and any(
+                            r in str(self.schema)
+                            for r in ("$ref", "$recursiveRef", "$dynamicRef")
+                        )
                     )
                 )
             ):
                 try:
                     if self._rust_validator is None:
-                        self._rust_validator = jsonschema_rust.RustValidator(self.schema)
+                        self._rust_validator = (
+                            jsonschema_rust.RustValidator(self.schema)
+                        )
                     if self._rust_validator.is_valid(instance):
                         return
-                except Exception:
+                except Exception:  # noqa: BLE001, S110
                     pass
 
             if _schema is not None:
@@ -499,7 +510,10 @@ def create(
             if self._evolve_cache is None:
                 self._evolve_cache = {}
 
-            cache_key = (id(schema), id(resolver) if resolver is not None else None)
+            cache_key = (
+                id(schema),
+                id(resolver) if resolver is not None else None,
+            )
             evolved = self._evolve_cache.get(cache_key)
             if evolved is None:
                 if self._ref_resolver is not None:

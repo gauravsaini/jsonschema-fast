@@ -9,7 +9,10 @@ project = "jsonschema"
 author = "Julian Berman"
 copyright = "2013, " + author
 
-release = importlib.metadata.version("jsonschema")
+try:
+    release = importlib.metadata.version("jsonschema")
+except importlib.metadata.PackageNotFoundError:
+    release = importlib.metadata.version("jsonschema-fast")
 version = release.partition("-")[0]
 
 language = "en"

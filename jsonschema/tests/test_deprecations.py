@@ -22,7 +22,11 @@ class TestDeprecations(TestCase):
         with self.assertWarnsRegex(DeprecationWarning, message) as w:
             from jsonschema import __version__
 
-        self.assertEqual(__version__, importlib.metadata.version("jsonschema"))
+        try:
+            expected_version = importlib.metadata.version("jsonschema")
+        except importlib.metadata.PackageNotFoundError:
+            expected_version = importlib.metadata.version("jsonschema-fast")
+        self.assertEqual(__version__, expected_version)
         self.assertEqual(w.filename, __file__)
 
     def test_validators_ErrorTree(self):

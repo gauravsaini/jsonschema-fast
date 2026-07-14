@@ -143,6 +143,13 @@ def _resolve_name_with_default(name):
     return resolve_name(name)
 
 
+def _get_version():
+    try:
+        return metadata.version("jsonschema")
+    except metadata.PackageNotFoundError:
+        return metadata.version("jsonschema-fast")
+
+
 parser = argparse.ArgumentParser(
     description="JSON Schema Validation CLI",
 )
@@ -197,7 +204,7 @@ parser.add_argument(
 parser.add_argument(
     "--version",
     action="version",
-    version=metadata.version("jsonschema"),
+    version=_get_version(),
 )
 parser.add_argument(
     "schema",

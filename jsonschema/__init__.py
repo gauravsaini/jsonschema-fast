@@ -35,7 +35,10 @@ def __getattr__(name):
         )
 
         from importlib import metadata
-        return metadata.version("jsonschema")
+        try:
+            return metadata.version("jsonschema")
+        except metadata.PackageNotFoundError:
+            return metadata.version("jsonschema-fast")
     elif name == "RefResolver":
         from jsonschema.validators import _RefResolver
         warnings.warn(
