@@ -414,7 +414,13 @@ def create(
                 and self.__class__.__module__ == "jsonschema.validators"
                 and self._ref_resolver is None
                 and self.format_checker is None
-                and self._registry is _REMOTE_WARNING_REGISTRY
+                and (
+                    self._registry is _REMOTE_WARNING_REGISTRY
+                    or not (
+                        isinstance(self.schema, dict)
+                        and any(r in str(self.schema) for r in ("$ref", "$recursiveRef", "$dynamicRef"))
+                    )
+                )
             ):
                 try:
                     if self._rust_validator is None:

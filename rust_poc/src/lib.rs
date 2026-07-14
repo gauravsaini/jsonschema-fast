@@ -185,16 +185,37 @@ fn get_value_at_path(py: Python<'_>, instance: &Bound<'_, PyAny>, path_list: &Bo
     Ok(current.unbind())
 }
 
+use std::sync::{Arc, Mutex, OnceLock};
+use std::collections::HashMap;
+
+fn get_compiled_validator(schema: &Value) -> Result<Arc<CrateValidator>, String> {
+    static CACHE: OnceLock<Mutex<HashMap<Value, Arc<CrateValidator>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    
+    let mut lock = cache.lock().unwrap();
+    if let Some(val) = lock.get(schema) {
+        return Ok(Arc::clone(val));
+    }
+    
+    match jsonschema::validator_for(schema) {
+        Ok(val) => {
+            let val_arc = Arc::new(val);
+            lock.insert(schema.clone(), Arc::clone(&val_arc));
+            Ok(val_arc)
+        }
+        Err(e) => Err(e.to_string()),
+    }
+}
 
 struct ParallelValidatorSpec {
     instance_path: Vec<String>,
     schema_path: Vec<String>,
-    items_validator: CrateValidator,
+    items_validator: Arc<CrateValidator>,
 }
 
 #[pyclass]
 struct RustValidator {
-    compiled: CrateValidator,
+    compiled: Arc<CrateValidator>,
     schema: PyObject,
     specs: Vec<ParallelValidatorSpec>,
 }
@@ -202,7 +223,7 @@ struct RustValidator {
 struct ValidationTask<'a> {
     instance_path: Vec<String>,
     item_val: &'a Value,
-    validator: &'a CrateValidator,
+    validator: &'a Arc<CrateValidator>,
     schema_path_prefix: &'a [String],
 }
 
@@ -230,7 +251,7 @@ fn preprocess_schema(
                     *items = Value::Bool(true);
                     
                     // Compile validator for the items schema
-                    if let Ok(val) = jsonschema::validator_for(&items_schema) {
+                    if let Ok(val) = get_compiled_validator(&items_schema) {
                         specs.push(ParallelValidatorSpec {
                             instance_path: current_instance_path.clone(),
                             schema_path: {
@@ -396,27 +417,27 @@ impl RustValidator {
     fn new(py: Python<'_>, schema: &Bound<'_, PyAny>) -> PyResult<Self> {
         let mut schema_json: Value = pyany_to_value(py, schema)?;
         
+        let schema_str = serde_json::to_string(&schema_json).unwrap_or_default();
+        let disable_parallel = schema_str.contains("unevaluatedItems") || schema_str.contains("prefixItems");
+
         let mut specs = Vec::new();
         let mut current_instance_path = Vec::new();
         let mut current_schema_path = Vec::new();
         
-        preprocess_schema(
-            &mut schema_json,
-            &mut current_instance_path,
-            &mut current_schema_path,
-            &mut specs,
-        );
+        if !disable_parallel {
+            preprocess_schema(
+                &mut schema_json,
+                &mut current_instance_path,
+                &mut current_schema_path,
+                &mut specs,
+            );
+        }
         
-        let compiled = jsonschema::validator_for(&schema_json).map_err(|e| {
+        let compiled = get_compiled_validator(&schema_json).map_err(|e| {
             let schema_error_class = py.import_bound("jsonschema.exceptions").unwrap().getattr("SchemaError").unwrap();
-            PyErr::from_value_bound(schema_error_class.call1((e.to_string(),)).unwrap())
+            PyErr::from_value_bound(schema_error_class.call1((e,)).unwrap())
         })?;
         
-        println!("Preprocessed specs: {}", specs.len());
-        for s in &specs {
-            println!("  spec path: {:?}, schema_path: {:?}", s.instance_path, s.schema_path);
-        }
-
         Ok(RustValidator {
             compiled,
             schema: schema.to_object(py),
