@@ -29,6 +29,7 @@ extensions = [
     "sphinx_json_schema_spec",
     "sphinxcontrib.spelling",
     "sphinxext.opengraph",
+    "myst_parser",
 ]
 
 cache_path = "_cache"

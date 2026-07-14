@@ -83,15 +83,15 @@ Source = "https://github.com/python-jsonschema/jsonschema"
 test = ["virtue", "jsonpath-ng"]
 
 [tool.hatch.metadata.hooks.fancy-pypi-readme]
-content-type = "text/x-rst"
+content-type = "text/markdown"
 
 [[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
-path = "README.rst"
-end-before = ".. start cut from PyPI"
+path = "README.md"
+end-before = "<!-- start cut from PyPI -->"
 
 [[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
-path = "README.rst"
-start-after = ".. end cut from PyPI\n\n\n"
+path = "README.md"
+start-after = "<!-- end cut from PyPI -->\n\n"
 
 [[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
 text = """

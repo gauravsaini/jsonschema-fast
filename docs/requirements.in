@@ -8,3 +8,4 @@ sphinx-copybutton
 sphinx-json-schema-spec
 sphinxcontrib-spelling
 sphinxext-opengraph
+myst-parser

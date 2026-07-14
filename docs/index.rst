@@ -1,7 +1,8 @@
 .. module:: jsonschema
    :noindex:
 
-.. include:: ../README.rst
+.. include:: ../README.md
+   :parser: myst_parser.sphinx_
 
 
 Contents
