@@ -421,6 +421,10 @@ def create(
                         self._rust_validator = jsonschema_rust.RustValidator(self.schema)
                     if self._rust_validator.is_valid(instance):
                         return
+                    for error in self._rust_validator.iter_errors(instance):
+                        error._set(type_checker=self.TYPE_CHECKER)
+                        yield error
+                    return
                 except Exception:
                     pass
 

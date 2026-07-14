@@ -7,7 +7,28 @@ use std::str::FromStr;
 use rayon::prelude::*;
 
 fn pyany_to_value(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<Value> {
-    if obj.is_none() {
+    if let Ok(d) = obj.downcast::<pyo3::types::PyDict>() {
+        let mut map = serde_json::Map::with_capacity(d.len());
+        for (k, v) in d.iter() {
+            let key: String = if let Ok(s) = k.downcast::<pyo3::types::PyString>() {
+                s.to_str()?.to_string()
+            } else {
+                k.extract()?
+            };
+            let val = pyany_to_value(py, &v)?;
+            map.insert(key, val);
+        }
+        Ok(Value::Object(map))
+    } else if let Ok(l) = obj.downcast::<pyo3::types::PyList>() {
+        let mut arr = Vec::with_capacity(l.len());
+        for item in l.iter() {
+            arr.push(pyany_to_value(py, &item)?);
+        }
+        Ok(Value::Array(arr))
+    } else if let Ok(s) = obj.downcast::<pyo3::types::PyString>() {
+        let val = s.to_str()?.to_string();
+        Ok(Value::String(val))
+    } else if obj.is_none() {
         Ok(Value::Null)
     } else if let Ok(b) = obj.downcast::<pyo3::types::PyBool>() {
         Ok(Value::Bool(b.is_true()))
@@ -31,23 +52,6 @@ fn pyany_to_value(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<Value> {
         } else {
             Err(PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid float"))
         }
-    } else if let Ok(s) = obj.downcast::<pyo3::types::PyString>() {
-        let val: String = s.extract()?;
-        Ok(Value::String(val))
-    } else if let Ok(d) = obj.downcast::<pyo3::types::PyDict>() {
-        let mut map = serde_json::Map::with_capacity(d.len());
-        for (k, v) in d.iter() {
-            let key: String = k.extract()?;
-            let val = pyany_to_value(py, &v)?;
-            map.insert(key, val);
-        }
-        Ok(Value::Object(map))
-    } else if let Ok(l) = obj.downcast::<pyo3::types::PyList>() {
-        let mut arr = Vec::with_capacity(l.len());
-        for item in l.iter() {
-            arr.push(pyany_to_value(py, &item)?);
-        }
-        Ok(Value::Array(arr))
     } else if let Ok(t) = obj.downcast::<pyo3::types::PyTuple>() {
         let mut arr = Vec::with_capacity(t.len());
         for item in t.iter() {
@@ -181,21 +185,6 @@ fn get_value_at_path(py: Python<'_>, instance: &Bound<'_, PyAny>, path_list: &Bo
     Ok(current.unbind())
 }
 
-#[pyclass]
-struct RustValidationError {
-    #[pyo3(get)]
-    message: String,
-    #[pyo3(get)]
-    validator: String,
-    #[pyo3(get)]
-    path: PyObject,
-    #[pyo3(get)]
-    schema_path: PyObject,
-    #[pyo3(get)]
-    validator_value: PyObject,
-    #[pyo3(get)]
-    instance: PyObject,
-}
 
 struct ParallelValidatorSpec {
     instance_path: Vec<String>,
@@ -532,7 +521,7 @@ impl RustValidator {
         Ok(())
     }
 
-    fn iter_errors(&self, py: Python<'_>, instance: &Bound<'_, PyAny>) -> PyResult<Vec<RustValidationError>> {
+    fn iter_errors(&self, py: Python<'_>, instance: &Bound<'_, PyAny>) -> PyResult<Vec<PyObject>> {
         let instance_json: Value = pyany_to_value(py, instance)?;
         
         // 1. Prepare tasks
@@ -599,39 +588,22 @@ impl RustValidator {
 
         // Convert parallel errors
         for err in parallel_errors {
-            let path_py = parse_location_to_py(py, &err.instance_path)?;
-            let schema_path_py = parse_location_to_py(py, &err.schema_path)?;
-            let validator_value = get_validator_value(py, schema_bound, schema_path_py.bind(py));
-            let sub_instance = get_value_at_path(py, instance, path_py.bind(py).downcast::<pyo3::types::PyList>()?)?;
-
-            py_errors.push(RustValidationError {
-                message: err.message,
-                validator: err.validator,
-                path: path_py,
-                schema_path: schema_path_py,
-                validator_value,
-                instance: sub_instance,
-            });
+            let err_obj = make_python_validation_error(py, &err, schema_bound, instance)?;
+            py_errors.push(err_obj);
         }
 
         // 3. Run main validation
         for err in self.compiled.iter_errors(&instance_json) {
-            let path_py = parse_location_to_py(py, err.instance_path.as_str())?;
-            let schema_path_py = parse_location_to_py(py, err.schema_path.as_str())?;
-            
-            let message = err.to_string();
-            let validator = get_keyword(&err.kind).to_string();
-            let validator_value = get_validator_value(py, schema_bound, schema_path_py.bind(py));
-            let sub_instance = get_value_at_path(py, instance, path_py.bind(py).downcast::<pyo3::types::PyList>()?)?;
-            
-            py_errors.push(RustValidationError {
-                message,
-                validator,
-                path: path_py,
-                schema_path: schema_path_py,
-                validator_value,
-                instance: sub_instance,
-            });
+            let abs_instance_path = err.instance_path.to_string();
+            let abs_schema_path = err.schema_path.to_string();
+            let p_err = ParallelError {
+                message: err.to_string(),
+                validator: get_keyword(&err.kind).to_string(),
+                instance_path: abs_instance_path,
+                schema_path: abs_schema_path,
+            };
+            let err_obj = make_python_validation_error(py, &p_err, schema_bound, instance)?;
+            py_errors.push(err_obj);
         }
 
         Ok(py_errors)
@@ -683,7 +655,6 @@ fn validate(py: Python<'_>, instance: &Bound<'_, PyAny>, schema: &Bound<'_, PyAn
 #[pymodule]
 fn jsonschema_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<RustValidator>()?;
-    m.add_class::<RustValidationError>()?;
     m.add_function(wrap_pyfunction!(validate, m)?)?;
     Ok(())
 }
