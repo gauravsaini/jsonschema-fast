@@ -3,6 +3,64 @@ use pythonize::depythonize;
 use jsonschema::Validator as CrateValidator;
 use jsonschema::error::ValidationErrorKind;
 use serde_json::Value;
+use std::str::FromStr;
+
+fn pyany_to_value(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<Value> {
+    if obj.is_none() {
+        Ok(Value::Null)
+    } else if let Ok(b) = obj.downcast::<pyo3::types::PyBool>() {
+        Ok(Value::Bool(b.is_true()))
+    } else if let Ok(i) = obj.downcast::<pyo3::types::PyInt>() {
+        if let Ok(val) = i.extract::<i64>() {
+            Ok(Value::Number(val.into()))
+        } else if let Ok(val) = i.extract::<u64>() {
+            Ok(Value::Number(val.into()))
+        } else {
+            let s: String = i.str()?.extract()?;
+            if let Ok(n) = serde_json::Number::from_str(&s) {
+                Ok(Value::Number(n))
+            } else {
+                Err(PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid large int"))
+            }
+        }
+    } else if let Ok(f) = obj.downcast::<pyo3::types::PyFloat>() {
+        let val = f.value();
+        if let Some(n) = serde_json::Number::from_f64(val) {
+            Ok(Value::Number(n))
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid float"))
+        }
+    } else if let Ok(s) = obj.downcast::<pyo3::types::PyString>() {
+        let val: String = s.extract()?;
+        Ok(Value::String(val))
+    } else if let Ok(d) = obj.downcast::<pyo3::types::PyDict>() {
+        let mut map = serde_json::Map::with_capacity(d.len());
+        for (k, v) in d.iter() {
+            let key: String = k.extract()?;
+            let val = pyany_to_value(py, &v)?;
+            map.insert(key, val);
+        }
+        Ok(Value::Object(map))
+    } else if let Ok(l) = obj.downcast::<pyo3::types::PyList>() {
+        let mut arr = Vec::with_capacity(l.len());
+        for item in l.iter() {
+            arr.push(pyany_to_value(py, &item)?);
+        }
+        Ok(Value::Array(arr))
+    } else if let Ok(t) = obj.downcast::<pyo3::types::PyTuple>() {
+        let mut arr = Vec::with_capacity(t.len());
+        for item in t.iter() {
+            arr.push(pyany_to_value(py, &item)?);
+        }
+        Ok(Value::Array(arr))
+    } else {
+        // Fallback to depythonize for custom types
+        match depythonize(obj) {
+            Ok(val) => Ok(val),
+            Err(e) => Err(e.into()),
+        }
+    }
+}
 
 fn parse_location_to_py(py: Python<'_>, loc: &str) -> PyResult<PyObject> {
     let list = pyo3::types::PyList::empty_bound(py);
@@ -116,7 +174,7 @@ struct RustValidator {
 impl RustValidator {
     #[new]
     fn new(py: Python<'_>, schema: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let schema_json: Value = depythonize(schema)?;
+        let schema_json: Value = pyany_to_value(py, schema)?;
         let compiled = jsonschema::validator_for(&schema_json).map_err(|e| {
             let schema_error_class = py.import_bound("jsonschema.exceptions").unwrap().getattr("SchemaError").unwrap();
             PyErr::from_value_bound(schema_error_class.call1((e.to_string(),)).unwrap())
@@ -128,7 +186,7 @@ impl RustValidator {
     }
 
     fn validate(&self, py: Python<'_>, instance: &Bound<'_, PyAny>) -> PyResult<()> {
-        let instance_json: Value = depythonize(instance)?;
+        let instance_json: Value = pyany_to_value(py, instance)?;
         let mut errors = self.compiled.iter_errors(&instance_json);
         if let Some(first_error) = errors.next() {
             let val_error_class = py.import_bound("jsonschema.exceptions")?.getattr("ValidationError")?;
@@ -156,7 +214,7 @@ impl RustValidator {
     }
 
     fn iter_errors(&self, py: Python<'_>, instance: &Bound<'_, PyAny>) -> PyResult<Vec<RustValidationError>> {
-        let instance_json: Value = depythonize(instance)?;
+        let instance_json: Value = pyany_to_value(py, instance)?;
         let errors = self.compiled.iter_errors(&instance_json);
         let mut py_errors = Vec::new();
         
@@ -181,16 +239,16 @@ impl RustValidator {
         Ok(py_errors)
     }
 
-    fn is_valid(&self, instance: &Bound<'_, PyAny>) -> PyResult<bool> {
-        let instance_json: Value = depythonize(instance)?;
+    fn is_valid(&self, py: Python<'_>, instance: &Bound<'_, PyAny>) -> PyResult<bool> {
+        let instance_json: Value = pyany_to_value(py, instance)?;
         Ok(self.compiled.is_valid(&instance_json))
     }
 }
 
 #[pyfunction]
 fn validate(py: Python<'_>, instance: &Bound<'_, PyAny>, schema: &Bound<'_, PyAny>) -> PyResult<()> {
-    let schema_json: Value = depythonize(schema)?;
-    let instance_json: Value = depythonize(instance)?;
+    let schema_json: Value = pyany_to_value(py, schema)?;
+    let instance_json: Value = pyany_to_value(py, instance)?;
 
     let compiled = match jsonschema::validator_for(&schema_json) {
         Ok(c) => c,

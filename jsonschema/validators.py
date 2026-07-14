@@ -284,13 +284,18 @@ def create(
                 if self._evolve_cache is None:
                     self._evolve_cache = {}
 
-                cache_key = (
-                    id(self),
-                    tuple(
+                schema_arg = changes.get("schema")
+                resolver_arg = changes.get("_resolver")
+                if len(changes) == 1 and schema_arg is not None:
+                    cache_key = id(schema_arg)
+                elif len(changes) == 2 and schema_arg is not None and resolver_arg is not None:
+                    cache_key = (id(schema_arg), id(resolver_arg))
+                else:
+                    cache_key = tuple(
                         (k, v if isinstance(v, (str, int, float, bool, type(None), tuple)) else id(v))
                         for k, v in sorted(changes.items())
                     )
-                )
+
                 if cache_key in self._evolve_cache:
                     return self._evolve_cache[cache_key]
 
@@ -375,13 +380,18 @@ def create(
             if self._evolve_cache is None:
                 self._evolve_cache = {}
 
-            cache_key = (
-                id(self),
-                tuple(
+            schema_arg = changes.get("schema")
+            resolver_arg = changes.get("_resolver")
+            if len(changes) == 1 and schema_arg is not None:
+                cache_key = id(schema_arg)
+            elif len(changes) == 2 and schema_arg is not None and resolver_arg is not None:
+                cache_key = (id(schema_arg), id(resolver_arg))
+            else:
+                cache_key = tuple(
                     (k, v if isinstance(v, (str, int, float, bool, type(None), tuple)) else id(v))
                     for k, v in sorted(changes.items())
                 )
-            )
+
             if cache_key in self._evolve_cache:
                 return self._evolve_cache[cache_key]
 
@@ -409,18 +419,8 @@ def create(
                 try:
                     if self._rust_validator is None:
                         self._rust_validator = jsonschema_rust.RustValidator(self.schema)
-                    rust_errors = self._rust_validator.iter_errors(instance)
-                    for err in rust_errors:
-                        yield exceptions.ValidationError(
-                            message=err.message,
-                            validator=err.validator,
-                            path=err.path,
-                            instance=instance,
-                            schema=self.schema,
-                            schema_path=err.schema_path,
-                            validator_value=err.validator_value,
-                        )
-                    return
+                    if self._rust_validator.is_valid(instance):
+                        return
                 except Exception:
                     pass
 
