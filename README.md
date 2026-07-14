@@ -1,13 +1,13 @@
-# jsonschema
+# jsonschema-fast
 
-[![PyPI](https://img.shields.io/pypi/v/jsonschema.svg)](https://pypi.org/project/jsonschema/)
-[![Pythons](https://img.shields.io/pypi/pyversions/jsonschema.svg)](https://pypi.org/project/jsonschema/)
+[![PyPI](https://img.shields.io/pypi/v/jsonschema-fast.svg)](https://pypi.org/project/jsonschema-fast/)
+[![Pythons](https://img.shields.io/pypi/pyversions/jsonschema-fast.svg)](https://pypi.org/project/jsonschema-fast/)
 [![CI](https://github.com/python-jsonschema/jsonschema/workflows/CI/badge.svg)](https://github.com/python-jsonschema/jsonschema/actions?query=workflow%3ACI)
 [![ReadTheDocs](https://readthedocs.org/projects/python-jsonschema/badge/?version=stable&style=flat)](https://python-jsonschema.readthedocs.io/en/stable/)
 [![Precommit](https://results.pre-commit.ci/badge/github/python-jsonschema/jsonschema/main.svg)](https://results.pre-commit.ci/latest/github/python-jsonschema/jsonschema/main)
 [![Zenodo](https://zenodo.org/badge/3072629.svg)](https://zenodo.org/badge/latestdoi/3072629)
 
-`jsonschema` is an implementation of the [JSON Schema](https://json-schema.org) specification for Python.
+`jsonschema-fast` is an implementation of the [JSON Schema](https://json-schema.org) specification for Python.
 
 ```python
 >>> from jsonschema import validate
@@ -69,10 +69,10 @@ Below are the results of isolated system benchmarks on a large nested database p
 
 ## Installation
 
-`jsonschema` is available on [PyPI](https://pypi.org/project/jsonschema/). You can install using [pip](https://pip.pypa.io/en/stable/):
+`jsonschema-fast` is available on [PyPI](https://pypi.org/project/jsonschema-fast/). You can install using [pip](https://pip.pypa.io/en/stable/):
 
 ```bash
-$ pip install jsonschema
+$ pip install jsonschema-fast
 ```
 
 ## Extras
@@ -85,7 +85,7 @@ Two extras are available when installing the package, both currently related to 
 They can be used when installing in order to include additional dependencies, e.g.:
 
 ```bash
-$ pip install jsonschema'[format]'
+$ pip install jsonschema-fast'[format]'
 ```
 
 Be aware that the mere presence of these dependencies – or even the specification of `format` checks in a schema – do *not* activate format checks (as per the specification).
