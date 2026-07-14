@@ -121,12 +121,8 @@ Otherwise, opening a [GitHub discussion](https://github.com/python-jsonschema/js
 
 ## About
 
-I'm Julian Berman.
+This fork, featuring the Rust-backed hybrid engine, was contributed by **Gaurav Saini**.
 
-`jsonschema` is on [GitHub](https://github.com/python-jsonschema/jsonschema).
+All credit for the original `jsonschema` library, its core design, and its long-term maintenance goes to the original author, **Julian Berman**, and the `python-jsonschema` contributors. The original project is hosted on [GitHub](https://github.com/python-jsonschema/jsonschema).
 
-Get in touch, via GitHub or otherwise, if you've got something to contribute, it'd be most welcome!
-
-If you feel overwhelmingly grateful, you can also [sponsor me](https://github.com/sponsors/Julian/).
-
-And for companies who appreciate `jsonschema` and its continued support and growth, `jsonschema` is also now supportable via [TideLift](https://tidelift.com/subscription/pkg/pypi-jsonschema?utm_source=pypi-jsonschema&utm_medium=referral&utm_campaign=readme).
+If you wish to support the original author, you can [sponsor Julian](https://github.com/sponsors/Julian/). For companies wishing to support `jsonschema`'s continued growth, the package is supportable via [TideLift](https://tidelift.com/subscription/pkg/pypi-jsonschema?utm_source=pypi-jsonschema&utm_medium=referral&utm_campaign=readme).
