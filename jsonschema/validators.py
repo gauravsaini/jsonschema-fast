@@ -3,6 +3,12 @@ Creation and extension of validators, with implementations for existing drafts.
 """
 from __future__ import annotations
 
+try:
+    import jsonschema_rust
+except ImportError:
+    jsonschema_rust = None
+
+
 from collections import deque
 from collections.abc import Iterable, Mapping, Sequence
 from functools import lru_cache
@@ -246,6 +252,18 @@ def create(
             kw_only=True,
             repr=False,
         )
+        _evolve_cache = field(
+            default=None,
+            kw_only=True,
+            repr=False,
+            eq=False,
+        )
+        _rust_validator = field(
+            default=None,
+            init=False,
+            repr=False,
+            eq=False,
+        )
 
         def __init_subclass__(cls):
             warnings.warn(
@@ -263,6 +281,19 @@ def create(
             )
 
             def evolve(self, **changes):
+                if self._evolve_cache is None:
+                    self._evolve_cache = {}
+
+                cache_key = (
+                    id(self),
+                    tuple(
+                        (k, v if isinstance(v, (str, int, float, bool, type(None), tuple)) else id(v))
+                        for k, v in sorted(changes.items())
+                    )
+                )
+                if cache_key in self._evolve_cache:
+                    return self._evolve_cache[cache_key]
+
                 cls = self.__class__
                 schema = changes.setdefault("schema", self.schema)
                 NewValidator = validator_for(schema, default=cls)
@@ -275,11 +306,15 @@ def create(
                     if init_name not in changes:
                         changes[init_name] = getattr(self, attr_name)
 
-                return NewValidator(**changes)
+                res = NewValidator(**changes)
+                self._evolve_cache[cache_key] = res
+                return res
 
             cls.evolve = evolve
 
         def __attrs_post_init__(self):
+            if self._evolve_cache is None:
+                self._evolve_cache = {}
             if self._resolver is None:
                 registry = self._registry
                 if registry is not _REMOTE_WARNING_REGISTRY:
@@ -337,6 +372,19 @@ def create(
             return self._ref_resolver
 
         def evolve(self, **changes):
+            if self._evolve_cache is None:
+                self._evolve_cache = {}
+
+            cache_key = (
+                id(self),
+                tuple(
+                    (k, v if isinstance(v, (str, int, float, bool, type(None), tuple)) else id(v))
+                    for k, v in sorted(changes.items())
+                )
+            )
+            if cache_key in self._evolve_cache:
+                return self._evolve_cache[cache_key]
+
             schema = changes.setdefault("schema", self.schema)
             NewValidator = validator_for(schema, default=self.__class__)
 
@@ -344,9 +392,38 @@ def create(
                 if init_name not in changes:
                     changes[init_name] = getattr(self, attr_name)
 
-            return NewValidator(**changes)
+            res = NewValidator(**changes)
+            self._evolve_cache[cache_key] = res
+            return res
 
         def iter_errors(self, instance, _schema=None):
+            if (
+                _schema is None
+                and jsonschema_rust is not None
+                and self.__class__.__name__ in ("Draft4Validator", "Draft6Validator", "Draft7Validator", "Draft201909Validator", "Draft202012Validator")
+                and self.__class__.__module__ == "jsonschema.validators"
+                and self._ref_resolver is None
+                and self.format_checker is None
+                and self._registry is _REMOTE_WARNING_REGISTRY
+            ):
+                try:
+                    if self._rust_validator is None:
+                        self._rust_validator = jsonschema_rust.RustValidator(self.schema)
+                    rust_errors = self._rust_validator.iter_errors(instance)
+                    for err in rust_errors:
+                        yield exceptions.ValidationError(
+                            message=err.message,
+                            validator=err.validator,
+                            path=err.path,
+                            instance=instance,
+                            schema=self.schema,
+                            schema_path=err.schema_path,
+                            validator_value=err.validator_value,
+                        )
+                    return
+                except Exception:
+                    pass
+
             if _schema is not None:
                 warnings.warn(
                     (
@@ -413,14 +490,21 @@ def create(
                 )
                 return
 
-            if self._ref_resolver is not None:
-                evolved = self.evolve(schema=schema)
-            else:
-                if resolver is None:
-                    resolver = self._resolver.in_subresource(
-                        specification.create_resource(schema),
-                    )
-                evolved = self.evolve(schema=schema, _resolver=resolver)
+            if self._evolve_cache is None:
+                self._evolve_cache = {}
+
+            cache_key = (id(schema), id(resolver) if resolver is not None else None)
+            evolved = self._evolve_cache.get(cache_key)
+            if evolved is None:
+                if self._ref_resolver is not None:
+                    evolved = self.evolve(schema=schema)
+                else:
+                    if resolver is None:
+                        resolver = self._resolver.in_subresource(
+                            specification.create_resource(schema),
+                        )
+                    evolved = self.evolve(schema=schema, _resolver=resolver)
+                self._evolve_cache[cache_key] = evolved
 
             for k, v in applicable_validators(schema):
                 validator = evolved.VALIDATORS.get(k)
