@@ -141,7 +141,8 @@ wheels = [
 ]
 
 [[package]]
-name = "jsonschema"
+name = "jsonschema-fast"
+version = "4.26.2"
 source = { editable = "." }
 dependencies = [
     { name = "attrs" },

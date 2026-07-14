@@ -1,6 +1,6 @@
 import time
 import jsonschema
-import jsonschema_rust
+from jsonschema import jsonschema_rust
 
 schema = {
     "type": "object",

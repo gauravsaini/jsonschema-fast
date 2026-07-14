@@ -1,13 +1,12 @@
 [build-system]
-requires = ["hatchling", "hatch-vcs", "hatch-fancy-pypi-readme"]
-build-backend = "hatchling.build"
-
-[tool.hatch.version]
-source = "vcs"
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
 
 [project]
-name = "jsonschema"
-description = "An implementation of JSON Schema validation for Python"
+name = "jsonschema-fast"
+version = "4.26.2"
+description = "A fast, Rust-accelerated hybrid implementation of JSON Schema validation for Python"
+readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["COPYING"]
@@ -36,7 +35,6 @@ classifiers = [
   "Topic :: File Formats :: JSON",
   "Topic :: File Formats :: JSON :: JSON Schema",
 ]
-dynamic = ["version", "readme"]
 dependencies = [
   "attrs>=22.2.0",
   "jsonschema-specifications>=2023.03.6",
@@ -82,29 +80,9 @@ Source = "https://github.com/python-jsonschema/jsonschema"
 [dependency-groups]
 test = ["virtue", "jsonpath-ng"]
 
-[tool.hatch.metadata.hooks.fancy-pypi-readme]
-content-type = "text/markdown"
-
-[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
-path = "README.md"
-end-before = "<!-- start cut from PyPI -->"
-
-[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
-path = "README.md"
-start-after = "<!-- end cut from PyPI -->\n\n"
-
-[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
-text = """
-
-
-Release Information
--------------------
-
-"""
-
-[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
-path = "CHANGELOG.rst"
-pattern = "(^v.+?)\nv"
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "jsonschema.jsonschema_rust"
 
 [tool.coverage.html]
 show_contexts = true

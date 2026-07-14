@@ -58,7 +58,7 @@ if __name__ == "__main__":
         jsonschema.validators.jsonschema_rust = None
         validator = jsonschema.Draft7Validator(schema)
     elif mode == "hybrid":
-        import jsonschema_rust
+        from jsonschema import jsonschema_rust
         validator = jsonschema.Draft7Validator(schema)
     else:
         raise ValueError(f"Unknown mode: {mode}")
