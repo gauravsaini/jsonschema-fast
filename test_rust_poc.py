@@ -1,4 +1,4 @@
-import rust_poc
+import jsonschema_rust as rust_poc
 import jsonschema
 from jsonschema.exceptions import ValidationError, SchemaError
 
