@@ -1,6 +1,6 @@
 import time
-import jsonschema
-from jsonschema import jsonschema_rust
+import jsonschema_fast
+from jsonschema_fast import jsonschema_rust
 
 schema = {
     "type": "object",
@@ -38,8 +38,8 @@ large_instance = {
 
 ITERATIONS = 200
 
-# 1. Benchmark Hybrid Validator (jsonschema with Rust enabled)
-py_hybrid_validator = jsonschema.Draft7Validator(schema)
+# 1. Benchmark Hybrid Validator (jsonschema_fast with Rust enabled)
+py_hybrid_validator = jsonschema_fast.Draft7Validator(schema)
 t0 = time.perf_counter()
 for _ in range(ITERATIONS):
     py_hybrid_validator.is_valid(large_instance)
@@ -56,9 +56,9 @@ t1 = time.perf_counter()
 rust_time = (t1 - t0) * 1000  # ms
 rust_ops = ITERATIONS / (t1 - t0)
 
-# 3. Benchmark Pure Python (jsonschema with Rust disabled)
-jsonschema.validators.jsonschema_rust = None
-pure_py_validator = jsonschema.Draft7Validator(schema)
+# 3. Benchmark Pure Python (jsonschema_fast with Rust disabled)
+jsonschema_fast.validators.jsonschema_rust = None
+pure_py_validator = jsonschema_fast.Draft7Validator(schema)
 t0 = time.perf_counter()
 for _ in range(ITERATIONS):
     pure_py_validator.is_valid(large_instance)

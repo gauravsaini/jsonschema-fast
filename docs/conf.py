@@ -3,16 +3,16 @@ import importlib.metadata
 import re
 
 ROOT = Path(__file__).parent.parent
-PACKAGE_SRC = ROOT / "jsonschema"
+PACKAGE_SRC = ROOT / "jsonschema_fast"
 
-project = "jsonschema"
+project = "jsonschema_fast"
 author = "Julian Berman"
 copyright = "2013, " + author
 
 try:
-    release = importlib.metadata.version("jsonschema")
+    release = importlib.metadata.version("jsonschema_fast")
 except importlib.metadata.PackageNotFoundError:
-    release = importlib.metadata.version("jsonschema-fast")
+    release = importlib.metadata.version("jsonschema_fast-fast")
 version = release.partition("-")[0]
 
 language = "en"
@@ -44,8 +44,8 @@ html_theme = "furo"
 
 # See sphinx-doc/sphinx#10785
 _TYPE_ALIASES = {
-    "jsonschema._format._F": ("data", "_F"),
-    "_typing.id_of": ("data", "jsonschema._typing.id_of"),
+    "jsonschema_fast._format._F": ("data", "_F"),
+    "_typing.id_of": ("data", "jsonschema_fast._typing.id_of"),
 }
 
 
@@ -80,9 +80,9 @@ def setup(app):
 # = Builders =
 
 doctest_global_setup = """
-from jsonschema import *
-from jsonschema import exceptions
-import jsonschema.validators
+from jsonschema_fast import *
+from jsonschema_fast import exceptions
+import jsonschema_fast.validators
 """
 
 
@@ -93,8 +93,8 @@ def entire_domain(host):
 linkcheck_ignore = [
     entire_domain("zenodo.org"),
     entire_domain("img.shields.io"),
-    "https://github.com/python-jsonschema/jsonschema/actions",
-    "https://github.com/python-jsonschema/jsonschema/workflows/CI/badge.svg",
+    "https://github.com/python-jsonschema_fast/jsonschema_fast/actions",
+    "https://github.com/python-jsonschema_fast/jsonschema_fast/workflows/CI/badge.svg",
 ]
 
 # = Extensions =

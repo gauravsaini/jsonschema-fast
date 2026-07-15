@@ -66,7 +66,7 @@ format-nongpl = [
 ]
 
 [project.scripts]
-jsonschema = "jsonschema.cli:main"
+jsonschema_fast = "jsonschema_fast.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/python-jsonschema/jsonschema"
@@ -82,7 +82,7 @@ test = ["virtue", "jsonpath-ng"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-module-name = "jsonschema.jsonschema_rust"
+module-name = "jsonschema_fast.jsonschema_rust"
 
 [tool.coverage.html]
 show_contexts = true
@@ -90,7 +90,7 @@ skip_covered = false
 
 [tool.coverage.run]
 branch = true
-source = ["jsonschema"]
+source = ["jsonschema_fast"]
 dynamic_context = "test_function"
 
 [tool.coverage.report]
@@ -99,9 +99,9 @@ exclude_also = [
   "\\s*\\.\\.\\.\\s*",
 ]
 omit = [
-  "*/jsonschema/__main__.py",
-  "*/jsonschema/benchmarks/*",
-  "*/jsonschema/tests/fuzz_validate.py",
+  "*/jsonschema_fast/__main__.py",
+  "*/jsonschema_fast/benchmarks/*",
+  "*/jsonschema_fast/tests/fuzz_validate.py",
 ]
 show_missing = true
 skip_covered = true
@@ -115,7 +115,7 @@ ignore = [
 [tool.mypy]
 ignore_missing_imports = true
 show_error_codes = true
-exclude = ["jsonschema/benchmarks/*"]
+exclude = ["jsonschema_fast/benchmarks/*"]
 
 [tool.ruff]
 line-length = 79
@@ -194,7 +194,7 @@ from-first = true
 [tool.ruff.lint.per-file-ignores]
 "noxfile.py" = ["ANN", "D100", "S101", "T201"]
 "docs/*" = ["ANN", "D", "INP001"]
-"jsonschema/tests/*" = [
+"jsonschema_fast/tests/*" = [
   "ANN",
   "D",
   "RUF012",
@@ -204,5 +204,5 @@ from-first = true
   "PYI024",
   "TRY",
 ]
-"jsonschema/tests/test_format.py" = ["ERA001"]
-"jsonschema/benchmarks/*" = ["ANN", "D", "INP001", "S101"]
+"jsonschema_fast/tests/test_format.py" = ["ERA001"]
+"jsonschema_fast/benchmarks/*" = ["ANN", "D", "INP001", "S101"]

@@ -1,10 +1,10 @@
 import timeit
 import sys
 
-# Ensure we import the local jsonschema
-sys.path.insert(0, "/home/gsai/.gemini/antigravity-cli/scratch/jsonschema")
-import jsonschema
-from jsonschema.validators import Draft7Validator
+# Ensure we import the local jsonschema_fast
+sys.path.insert(0, "/home/gsai/.gemini/antigravity-cli/scratch/jsonschema_fast")
+import jsonschema_fast
+from jsonschema_fast.validators import Draft7Validator
 
 # Complex schema with items and properties
 schema = {

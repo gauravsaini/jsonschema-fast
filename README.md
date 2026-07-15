@@ -47,13 +47,23 @@ This fork integrates a high-performance, Rust-backed hybrid validation engine po
 
 ### 📊 Performance Benchmarks (via `pyperf`)
 
-Below are the results of isolated system benchmarks on a large nested database payload (1,000 items):
+Below are the results of isolated system benchmarks on a large nested database payload (1,000 items) for both successful validation (happy path) and error collection (invalid path):
 
-| Validation Engine / Mode | Mean Latency | Speedup vs. Baseline |
-| :--- | :--- | :--- |
-| **Pure Python (Original)** | **10.9 ms** ± 0.3 ms | *Baseline* (1.0x) |
-| **Hybrid Rust Engine** | **806 μs** ± 26 μs | **13.5x Faster** 🚀 |
-| **Direct Rust C-Extension** | **808 μs** ± 19 μs | **13.5x Faster** 🚀 |
+| Validation Scenario / Mode | Pure Python (Original) | Hybrid Rust Engine | Speedup |
+| :--- | :---: | :---: | :---: |
+| **Happy Path (Valid Instance)** | 10.9 ms ± 0.3 ms | 806 μs ± 26 μs | **13.5x Faster** 🚀 |
+| **Error Collection (Invalid Instance)** | 8.55 ms ± 1.14 ms | 1.27 ms ± 0.26 ms | **6.7x Faster** 🚀 |
+
+### 🛡️ Correctness & Compliance Parity
+
+To guarantee that `jsonschema-fast` is a 100% transparent drop-in replacement, the official [JSON Schema Test Suite](https://github.com/json-schema-org/JSON-Schema-Test-Suite) is run in both validation modes:
+
+| Test Mode | Total Tests | Passed | Skipped / Failed | Compliance Rate |
+| :--- | :---: | :---: | :---: | :---: |
+| **Pure Python Mode** (`JSONSCHEMA_FAST_NO_RUST=1`) | 8,512 | 7,809 | 703 skipped / 0 failed | **100%** |
+| **Hybrid Rust Mode** (Default) | 8,512 | 7,809 | 703 skipped / 0 failed | **100%** |
+
+*Note: The 703 skipped tests represent optional draft features (e.g., ECMA-262 regex features, non-standard formats, or platform-specific limits) and are skipped identically in both validation modes.*
 
 ### How It Works Under the Hood
 

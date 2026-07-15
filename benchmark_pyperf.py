@@ -2,9 +2,9 @@ import pyperf
 import sys
 import os
 
-# Ensure local jsonschema is imported
+# Ensure local jsonschema_fast is imported
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
-import jsonschema
+import jsonschema_fast
 
 schema = {
     "type": "object",
@@ -56,13 +56,13 @@ if __name__ == "__main__":
     mode = args.mode
 
     if mode == "pure_python":
-        jsonschema.validators.jsonschema_rust = None
-        validator = jsonschema.Draft7Validator(schema)
+        jsonschema_fast.validators.jsonschema_rust = None
+        validator = jsonschema_fast.Draft7Validator(schema)
     elif mode == "hybrid":
-        from jsonschema import jsonschema_rust
-        validator = jsonschema.Draft7Validator(schema)
+        from jsonschema_fast import jsonschema_rust
+        validator = jsonschema_fast.Draft7Validator(schema)
     elif mode == "direct_rust":
-        from jsonschema import jsonschema_rust
+        from jsonschema_fast import jsonschema_rust
         validator = jsonschema_rust.RustValidator(schema)
     else:
         raise ValueError(f"Unknown mode: {mode}")

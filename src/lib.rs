@@ -13,7 +13,7 @@ fn pyany_to_value(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<Value> {
             let key: String = if let Ok(s) = k.downcast::<pyo3::types::PyString>() {
                 s.to_str()?.to_string()
             } else {
-                k.extract()?
+                k.str()?.to_str()?.to_string()
             };
             let val = pyany_to_value(py, &v)?;
             map.insert(key, val);
@@ -186,21 +186,82 @@ fn get_value_at_path(py: Python<'_>, instance: &Bound<'_, PyAny>, path_list: &Bo
 }
 
 use std::sync::{Arc, Mutex, OnceLock};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
-fn get_compiled_validator(schema: &Value) -> Result<Arc<CrateValidator>, String> {
-    static CACHE: OnceLock<Mutex<HashMap<Value, Arc<CrateValidator>>>> = OnceLock::new();
-    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+struct CacheState {
+    map: HashMap<(Value, bool), Arc<CrateValidator>>,
+    keys: VecDeque<(Value, bool)>,
+}
+
+fn init_rayon_thread_pool() {
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| {
+        if let Ok(val) = std::env::var("JSONSCHEMA_FAST_THREADS") {
+            if let Ok(num_threads) = val.parse::<usize>() {
+                let _ = rayon::ThreadPoolBuilder::new()
+                    .num_threads(num_threads)
+                    .build_global();
+            }
+        }
+    });
+}
+
+fn should_use_parallel(tasks_len: usize) -> bool {
+    if tasks_len < 32 {
+        return false;
+    }
+    static PARALLEL_DISABLED: OnceLock<bool> = OnceLock::new();
+    let disabled = *PARALLEL_DISABLED.get_or_init(|| {
+        init_rayon_thread_pool();
+        if std::env::var("JSONSCHEMA_FAST_NO_PARALLEL")
+            .map(|v| v == "1" || v.to_lowercase() == "true")
+            .unwrap_or(false)
+        {
+            return true;
+        }
+        if let Ok(val) = std::env::var("JSONSCHEMA_FAST_THREADS") {
+            if let Ok(num_threads) = val.parse::<usize>() {
+                if num_threads <= 1 {
+                    return true;
+                }
+            }
+        }
+        false
+    });
+    !disabled
+}
+
+fn get_compiled_validator(schema: &Value, should_validate_formats: bool) -> Result<Arc<CrateValidator>, String> {
+    static CACHE: OnceLock<Mutex<CacheState>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(CacheState {
+        map: HashMap::new(),
+        keys: VecDeque::new(),
+    }));
     
     let mut lock = cache.lock().unwrap();
-    if let Some(val) = lock.get(schema) {
-        return Ok(Arc::clone(val));
+    let key = (schema.clone(), should_validate_formats);
+    let val_opt = lock.map.get(&key).map(Arc::clone);
+    if let Some(val) = val_opt {
+        if let Some(pos) = lock.keys.iter().position(|k| k == &key) {
+            lock.keys.remove(pos);
+        }
+        lock.keys.push_back(key);
+        return Ok(val);
     }
     
-    match jsonschema::validator_for(schema) {
+    let mut options = jsonschema::options();
+    options.should_validate_formats(should_validate_formats);
+    
+    match options.build(schema) {
         Ok(val) => {
             let val_arc = Arc::new(val);
-            lock.insert(schema.clone(), Arc::clone(&val_arc));
+            if lock.map.len() >= 1024 {
+                if let Some(oldest_key) = lock.keys.pop_front() {
+                    lock.map.remove(&oldest_key);
+                }
+            }
+            lock.map.insert(key.clone(), Arc::clone(&val_arc));
+            lock.keys.push_back(key);
             Ok(val_arc)
         }
         Err(e) => Err(e.to_string()),
@@ -239,6 +300,7 @@ fn preprocess_schema(
     current_instance_path: &mut Vec<String>,
     current_schema_path: &mut Vec<String>,
     specs: &mut Vec<ParallelValidatorSpec>,
+    should_validate_formats: bool,
 ) {
     if let Value::Object(map) = schema {
         // 1. If it's an array type validator with items
@@ -251,7 +313,7 @@ fn preprocess_schema(
                     *items = Value::Bool(true);
                     
                     // Compile validator for the items schema
-                    if let Ok(val) = get_compiled_validator(&items_schema) {
+                    if let Ok(val) = get_compiled_validator(&items_schema, should_validate_formats) {
                         specs.push(ParallelValidatorSpec {
                             instance_path: current_instance_path.clone(),
                             schema_path: {
@@ -272,7 +334,7 @@ fn preprocess_schema(
             for (key, subschema) in properties.iter_mut() {
                 current_instance_path.push(key.clone());
                 current_schema_path.push(key.clone());
-                preprocess_schema(subschema, current_instance_path, current_schema_path, specs);
+                preprocess_schema(subschema, current_instance_path, current_schema_path, specs, should_validate_formats);
                 current_schema_path.pop();
                 current_instance_path.pop();
             }
@@ -287,7 +349,7 @@ fn preprocess_schema(
                     for (i, subschema) in arr.iter_mut().enumerate() {
                         current_instance_path.push(i.to_string());
                         current_schema_path.push(i.to_string());
-                        preprocess_schema(subschema, current_instance_path, current_schema_path, specs);
+                        preprocess_schema(subschema, current_instance_path, current_schema_path, specs, should_validate_formats);
                         current_schema_path.pop();
                         current_instance_path.pop();
                     }
@@ -295,35 +357,35 @@ fn preprocess_schema(
                 current_schema_path.pop();
             }
         }
-
+ 
         // 4. Recurse into combinators (allOf, anyOf, oneOf)
         for comb in ["allOf", "anyOf", "oneOf"] {
             if let Some(Value::Array(arr)) = map.get_mut(comb) {
                 current_schema_path.push(comb.to_string());
                 for (i, subschema) in arr.iter_mut().enumerate() {
                     current_schema_path.push(i.to_string());
-                    preprocess_schema(subschema, current_instance_path, current_schema_path, specs);
+                    preprocess_schema(subschema, current_instance_path, current_schema_path, specs, should_validate_formats);
                     current_schema_path.pop();
                 }
                 current_schema_path.pop();
             }
         }
-
+ 
         // 5. Recurse into conditional schemas
         for cond in ["if", "then", "else"] {
             if let Some(subschema) = map.get_mut(cond) {
                 current_schema_path.push(cond.to_string());
-                preprocess_schema(subschema, current_instance_path, current_schema_path, specs);
+                preprocess_schema(subschema, current_instance_path, current_schema_path, specs, should_validate_formats);
                 current_schema_path.pop();
             }
         }
-
+ 
         // 6. Recurse into additionalProperties
         if let Some(additional_properties) = map.get_mut("additionalProperties") {
             if additional_properties.is_object() {
                 current_schema_path.push("additionalProperties".to_string());
                 current_instance_path.push("*".to_string());
-                preprocess_schema(additional_properties, current_instance_path, current_schema_path, specs);
+                preprocess_schema(additional_properties, current_instance_path, current_schema_path, specs, should_validate_formats);
                 current_instance_path.pop();
                 current_schema_path.pop();
             }
@@ -391,7 +453,7 @@ fn make_python_validation_error(
     schema: &Bound<'_, PyAny>,
     root_instance: &Bound<'_, PyAny>,
 ) -> PyResult<PyObject> {
-    let val_error_class = py.import_bound("jsonschema.exceptions")?.getattr("ValidationError")?;
+    let val_error_class = py.import_bound("jsonschema_fast.exceptions")?.getattr("ValidationError")?;
     let path_py = parse_location_to_py(py, &err.instance_path)?;
     let schema_path_py = parse_location_to_py(py, &err.schema_path)?;
     
@@ -414,7 +476,8 @@ fn make_python_validation_error(
 #[pymethods]
 impl RustValidator {
     #[new]
-    fn new(py: Python<'_>, schema: &Bound<'_, PyAny>) -> PyResult<Self> {
+    #[pyo3(signature = (schema, should_validate_formats=false))]
+    fn new(py: Python<'_>, schema: &Bound<'_, PyAny>, should_validate_formats: bool) -> PyResult<Self> {
         let mut schema_json: Value = pyany_to_value(py, schema)?;
         
         let schema_str = serde_json::to_string(&schema_json).unwrap_or_default();
@@ -430,11 +493,12 @@ impl RustValidator {
                 &mut current_instance_path,
                 &mut current_schema_path,
                 &mut specs,
+                should_validate_formats,
             );
         }
         
-        let compiled = get_compiled_validator(&schema_json).map_err(|e| {
-            let schema_error_class = py.import_bound("jsonschema.exceptions").unwrap().getattr("SchemaError").unwrap();
+        let compiled = get_compiled_validator(&schema_json, should_validate_formats).map_err(|e| {
+            let schema_error_class = py.import_bound("jsonschema_fast.exceptions").unwrap().getattr("SchemaError").unwrap();
             PyErr::from_value_bound(schema_error_class.call1((e,)).unwrap())
         })?;
         
@@ -472,7 +536,7 @@ impl RustValidator {
         }
 
         // 2. Run validation (parallel if tasks are many, otherwise sequential)
-        let parallel_errors: Vec<ParallelError> = if tasks.len() >= 32 {
+        let parallel_errors: Vec<ParallelError> = if should_use_parallel(tasks.len()) {
             tasks
                 .par_iter()
                 .flat_map(|task| {
@@ -517,7 +581,7 @@ impl RustValidator {
         // 4. Validate against the main compiled validator
         let mut errors = self.compiled.iter_errors(&instance_json);
         if let Some(first_error) = errors.next() {
-            let val_error_class = py.import_bound("jsonschema.exceptions")?.getattr("ValidationError")?;
+            let val_error_class = py.import_bound("jsonschema_fast.exceptions")?.getattr("ValidationError")?;
             let path_py = parse_location_to_py(py, first_error.instance_path.as_str())?;
             let schema_path_py = parse_location_to_py(py, first_error.schema_path.as_str())?;
             
@@ -569,7 +633,7 @@ impl RustValidator {
         }
 
         // 2. Run validation (parallel if tasks are many, otherwise sequential)
-        let parallel_errors: Vec<ParallelError> = if tasks.len() >= 32 {
+        let parallel_errors: Vec<ParallelError> = if should_use_parallel(tasks.len()) {
             tasks
                 .par_iter()
                 .flat_map(|task| {
@@ -640,7 +704,7 @@ impl RustValidator {
             let mut current_instance_path = Vec::new();
             get_arrays_to_validate(&instance_json, &spec.instance_path, 0, &mut current_instance_path, &mut arrays);
             
-            for (arr_path, elements) in arrays {
+            for (_, elements) in arrays {
                 for elem in elements {
                     tasks.push(ValidationTask {
                         instance_path: Vec::new(),
@@ -653,7 +717,7 @@ impl RustValidator {
         }
 
         // 2. Run elements check (parallel if tasks are many, otherwise sequential)
-        let has_error = if tasks.len() >= 32 {
+        let has_error = if should_use_parallel(tasks.len()) {
             tasks.par_iter().any(|task| !task.validator.is_valid(task.item_val))
         } else {
             tasks.iter().any(|task| !task.validator.is_valid(task.item_val))
@@ -669,7 +733,7 @@ impl RustValidator {
 
 #[pyfunction]
 fn validate(py: Python<'_>, instance: &Bound<'_, PyAny>, schema: &Bound<'_, PyAny>) -> PyResult<()> {
-    let validator = RustValidator::new(py, schema)?;
+    let validator = RustValidator::new(py, schema, false)?;
     validator.validate(py, instance)
 }
 

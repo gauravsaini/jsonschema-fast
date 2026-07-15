@@ -1,6 +1,6 @@
-from jsonschema import jsonschema_rust as rust_poc
-import jsonschema
-from jsonschema.exceptions import ValidationError, SchemaError
+from jsonschema_fast import jsonschema_rust as rust_poc
+import jsonschema_fast
+from jsonschema_fast.exceptions import ValidationError, SchemaError
 
 print("Starting Rust JSONSchema PoC Verification...")
 
@@ -29,7 +29,7 @@ try:
     rust_poc.validate(invalid_instance, schema)
     print("✗ Expected ValidationError but nothing was raised.")
 except ValidationError as e:
-    print("✓ Successfully caught jsonschema.exceptions.ValidationError!")
+    print("✓ Successfully caught jsonschema_fast.exceptions.ValidationError!")
     print(f"  message: {e.message}")
     print(f"  validator: {e.validator}")
     print(f"  path: {list(e.path)}")
@@ -46,7 +46,7 @@ try:
     rust_poc.validate({"name": "Alice"}, invalid_schema)
     print("✗ Expected SchemaError but nothing was raised.")
 except SchemaError as e:
-    print("✓ Successfully caught jsonschema.exceptions.SchemaError!")
+    print("✓ Successfully caught jsonschema_fast.exceptions.SchemaError!")
     print(f"  message: {e.message}")
 except Exception as e:
     print(f"✗ Caught wrong exception type: {type(e).__name__} - {e}")

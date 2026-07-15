@@ -1,5 +1,5 @@
 import time
-import jsonschema
+import jsonschema_fast
 import rust_poc
 
 schema = {
@@ -38,11 +38,11 @@ invalid_instance = {
 }
 
 # 1. Warm up & Verify
-jsonschema.validate(valid_instance, schema)
+jsonschema_fast.validate(valid_instance, schema)
 rust_poc.validate(valid_instance, schema)
 
 # Compile validators
-py_validator = jsonschema.Draft7Validator(schema)
+py_validator = jsonschema_fast.Draft7Validator(schema)
 rust_validator = rust_poc.RustValidator(schema)
 
 ITERATIONS = 20000
