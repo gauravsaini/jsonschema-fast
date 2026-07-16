@@ -79,6 +79,8 @@ jobs:
           - os: windows-latest
             noxenv: "docs(linkcheck)"
           - os: windows-latest
+            noxenv: "docs(man)"
+          - os: windows-latest
             noxenv: "docs(spelling)"
           - os: windows-latest
             noxenv: "docs(style)"
