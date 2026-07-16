@@ -1,3 +1,4 @@
+from __future__ import annotations
 from contextlib import redirect_stderr, redirect_stdout
 from importlib import metadata
 from io import StringIO

@@ -231,7 +231,12 @@ fn should_use_parallel(tasks_len: usize) -> bool {
     !disabled
 }
 
-fn get_compiled_validator(schema: &Value, should_validate_formats: bool) -> Result<Arc<CrateValidator>, String> {
+fn get_compiled_validator(
+    schema: &Value, 
+    should_validate_formats: bool,
+    format_funcs: Option<Vec<(String, PyObject)>>,
+    registry_resources: Option<Vec<(String, Value)>>,
+) -> Result<Arc<CrateValidator>, String> {
     static CACHE: OnceLock<Mutex<CacheState>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(CacheState {
         map: HashMap::new(),
@@ -240,28 +245,59 @@ fn get_compiled_validator(schema: &Value, should_validate_formats: bool) -> Resu
     
     let mut lock = cache.lock().unwrap();
     let key = (schema.clone(), should_validate_formats);
-    let val_opt = lock.map.get(&key).map(Arc::clone);
-    if let Some(val) = val_opt {
-        if let Some(pos) = lock.keys.iter().position(|k| k == &key) {
-            lock.keys.remove(pos);
+    let has_custom_formats = format_funcs.as_ref().map(|v| !v.is_empty()).unwrap_or(false);
+    let has_registry = registry_resources.as_ref().map(|v| !v.is_empty()).unwrap_or(false);
+    
+    if !has_custom_formats && !has_registry {
+        let val_opt = lock.map.get(&key).map(Arc::clone);
+        if let Some(val) = val_opt {
+            if let Some(pos) = lock.keys.iter().position(|k| k == &key) {
+                lock.keys.remove(pos);
+            }
+            lock.keys.push_back(key);
+            return Ok(val);
         }
-        lock.keys.push_back(key);
-        return Ok(val);
     }
     
     let mut options = jsonschema::options();
     options.should_validate_formats(should_validate_formats);
     
+    if let Some(funcs) = format_funcs {
+        for (name, func_obj) in funcs {
+            let leaked_name: &'static str = Box::leak(name.into_boxed_str());
+            options.with_format(leaked_name, move |s: &str| -> bool {
+                Python::with_gil(|py| {
+                    if let Ok(res) = func_obj.call1(py, (s,)) {
+                        if let Ok(b) = res.is_truthy(py) {
+                            return b;
+                        }
+                    }
+                    false
+                })
+            });
+        }
+    }
+
+    if let Some(resources) = registry_resources {
+        for (uri, schema_val) in resources {
+            if let Ok(resource) = jsonschema::Resource::from_contents(schema_val) {
+                options.with_resource(uri, resource);
+            }
+        }
+    }
+    
     match options.build(schema) {
         Ok(val) => {
             let val_arc = Arc::new(val);
-            if lock.map.len() >= 1024 {
-                if let Some(oldest_key) = lock.keys.pop_front() {
-                    lock.map.remove(&oldest_key);
+            if !has_custom_formats && !has_registry {
+                if lock.map.len() >= 1024 {
+                    if let Some(oldest_key) = lock.keys.pop_front() {
+                        lock.map.remove(&oldest_key);
+                    }
                 }
+                lock.map.insert(key.clone(), Arc::clone(&val_arc));
+                lock.keys.push_back(key);
             }
-            lock.map.insert(key.clone(), Arc::clone(&val_arc));
-            lock.keys.push_back(key);
             Ok(val_arc)
         }
         Err(e) => Err(e.to_string()),
@@ -313,7 +349,7 @@ fn preprocess_schema(
                     *items = Value::Bool(true);
                     
                     // Compile validator for the items schema
-                    if let Ok(val) = get_compiled_validator(&items_schema, should_validate_formats) {
+                    if let Ok(val) = get_compiled_validator(&items_schema, should_validate_formats, None, None) {
                         specs.push(ParallelValidatorSpec {
                             instance_path: current_instance_path.clone(),
                             schema_path: {
@@ -476,8 +512,14 @@ fn make_python_validation_error(
 #[pymethods]
 impl RustValidator {
     #[new]
-    #[pyo3(signature = (schema, should_validate_formats=false))]
-    fn new(py: Python<'_>, schema: &Bound<'_, PyAny>, should_validate_formats: bool) -> PyResult<Self> {
+    #[pyo3(signature = (schema, should_validate_formats=false, format_funcs=None, registry=None))]
+    fn new(
+        py: Python<'_>, 
+        schema: &Bound<'_, PyAny>, 
+        should_validate_formats: bool,
+        format_funcs: Option<Vec<(String, PyObject)>>,
+        registry: Option<HashMap<String, PyObject>>,
+    ) -> PyResult<Self> {
         let mut schema_json: Value = pyany_to_value(py, schema)?;
         
         let schema_str = serde_json::to_string(&schema_json).unwrap_or_default();
@@ -496,8 +538,19 @@ impl RustValidator {
                 should_validate_formats,
             );
         }
+
+        let mut registry_resources = None;
+        if let Some(reg) = registry {
+            let mut resources = Vec::new();
+            for (uri, schema_obj) in reg {
+                let schema_bound = schema_obj.bind(py);
+                let schema_val = pyany_to_value(py, schema_bound)?;
+                resources.push((uri, schema_val));
+            }
+            registry_resources = Some(resources);
+        }
         
-        let compiled = get_compiled_validator(&schema_json, should_validate_formats).map_err(|e| {
+        let compiled = get_compiled_validator(&schema_json, should_validate_formats, format_funcs, registry_resources).map_err(|e| {
             let schema_error_class = py.import_bound("jsonschema_fast.exceptions").unwrap().getattr("SchemaError").unwrap();
             PyErr::from_value_bound(schema_error_class.call1((e,)).unwrap())
         })?;
@@ -733,7 +786,7 @@ impl RustValidator {
 
 #[pyfunction]
 fn validate(py: Python<'_>, instance: &Bound<'_, PyAny>, schema: &Bound<'_, PyAny>) -> PyResult<()> {
-    let validator = RustValidator::new(py, schema, false)?;
+    let validator = RustValidator::new(py, schema, false, None, None)?;
     validator.validate(py, instance)
 }
 
