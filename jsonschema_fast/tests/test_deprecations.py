@@ -25,7 +25,9 @@ class TestDeprecations(TestCase):
         try:
             expected_version = importlib.metadata.version("jsonschema_fast")
         except importlib.metadata.PackageNotFoundError:
-            expected_version = importlib.metadata.version("jsonschema_fast-fast")
+            expected_version = importlib.metadata.version(
+                "jsonschema_fast-fast",
+            )
         self.assertEqual(__version__, expected_version)
         self.assertEqual(w.filename, __file__)
 
@@ -47,6 +49,7 @@ class TestDeprecations(TestCase):
         Importing ErrorTree from the package root should not emit a deprecation warning.
         """
         import warnings
+
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             from jsonschema_fast import ErrorTree
@@ -73,6 +76,7 @@ class TestDeprecations(TestCase):
         Importing FormatError from the package root should not emit a deprecation warning.
         """
         import warnings
+
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             from jsonschema_fast import FormatError
@@ -83,6 +87,7 @@ class TestDeprecations(TestCase):
         Importing Validator from the package root should not emit a deprecation warning.
         """
         import warnings
+
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             from jsonschema_fast import Validator
@@ -94,7 +99,9 @@ class TestDeprecations(TestCase):
         deprecated.
         """
 
-        message = "Accessing jsonschema_fast.validators.validators is deprecated"
+        message = (
+            "Accessing jsonschema_fast.validators.validators is deprecated"
+        )
         with self.assertWarnsRegex(DeprecationWarning, message) as w:
             value = validators.validators
 
@@ -107,7 +114,9 @@ class TestDeprecations(TestCase):
         deprecated.
         """
 
-        message = "Accessing jsonschema_fast.validators.meta_schemas is deprecated"
+        message = (
+            "Accessing jsonschema_fast.validators.meta_schemas is deprecated"
+        )
         with self.assertWarnsRegex(DeprecationWarning, message) as w:
             value = validators.meta_schemas
 
@@ -150,7 +159,7 @@ class TestDeprecations(TestCase):
         validator = validators.Draft7Validator({})
         message = "Passing a schema to Validator.iter_errors is deprecated "
         with self.assertWarnsRegex(DeprecationWarning, message) as w:
-            error, = validator.iter_errors("foo", {"type": "number"})
+            (error,) = validator.iter_errors("foo", {"type": "number"})
 
         self.assertEqual(error.validator, "type")
         self.assertEqual(w.filename, __file__)
@@ -272,12 +281,14 @@ class TestDeprecations(TestCase):
 
         message = "Subclassing validator classes is "
         with self.assertWarnsRegex(DeprecationWarning, message) as w:
+
             class Subclass(validators.Draft202012Validator):
                 pass
 
         self.assertEqual(w.filename, __file__)
 
         with self.assertWarnsRegex(DeprecationWarning, message) as w:
+
             class AnotherSubclass(validators.create(meta_schema={})):
                 pass
 
@@ -372,6 +383,7 @@ class TestDeprecations(TestCase):
         message = "The jsonschema_fast CLI is deprecated and will be removed "
         with self.assertWarnsRegex(DeprecationWarning, message) as w:
             import jsonschema_fast.cli
+
             importlib.reload(jsonschema_fast.cli)
 
         self.assertEqual(w.filename, importlib.__file__)
@@ -386,7 +398,9 @@ class TestDeprecations(TestCase):
             capture_output=True,
             check=True,
         )
-        self.assertIn(b"The jsonschema_fast CLI is deprecated ", process.stderr)
+        self.assertIn(
+            b"The jsonschema_fast CLI is deprecated ", process.stderr,
+        )
 
     def test_automatic_remote_retrieval(self):
         """
@@ -397,7 +411,9 @@ class TestDeprecations(TestCase):
 
         if "requests" in sys.modules:  # pragma: no cover
             self.addCleanup(
-                sys.modules.__setitem__, "requests", sys.modules["requests"],
+                sys.modules.__setitem__,
+                "requests",
+                sys.modules["requests"],
             )
         sys.modules["requests"] = None
 
@@ -408,10 +424,11 @@ class TestDeprecations(TestCase):
 
             # Ha ha urllib.request.Request "normalizes" header names and
             # Request.get_header does not also normalize them...
-            (header, value), = request.header_items()
+            ((header, value),) = request.header_items()
             self.assertEqual(header.lower(), "user-agent")
             self.assertEqual(
-                value, "python-jsonschema_fast (deprecated $ref resolution)",
+                value,
+                "python-jsonschema_fast (deprecated $ref resolution)",
             )
             yield BytesIO(json.dumps(schema).encode("utf8"))
 

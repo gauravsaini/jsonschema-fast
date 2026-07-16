@@ -8,7 +8,7 @@ astroid==4.1.2
     # via sphinx-autoapi
 attrs==26.1.0
     # via
-    #   jsonschema
+    #   jsonschema-fast
     #   referencing
 babel==2.18.0
     # via sphinx
@@ -33,10 +33,10 @@ jinja2==3.1.6
     #   myst-parser
     #   sphinx
     #   sphinx-autoapi
-jsonschema @ file:.
+jsonschema-fast @ file:.
     # via -r docs/requirements.in
 jsonschema-specifications==2025.9.1
-    # via jsonschema
+    # via jsonschema-fast
 lxml==6.1.1
     # via
     #   -r docs/requirements.in
@@ -68,7 +68,7 @@ pyyaml==6.0.3
     #   sphinx-autoapi
 referencing==0.37.0
     # via
-    #   jsonschema
+    #   jsonschema-fast
     #   jsonschema-specifications
 requests==2.34.2
     # via
@@ -80,7 +80,7 @@ roman-numerals-py==4.1.0
     # via sphinx
 rpds-py==2026.6.3
     # via
-    #   jsonschema
+    #   jsonschema-fast
     #   referencing
 snowballstemmer==3.1.1
     # via sphinx
@@ -125,6 +125,8 @@ sphinxcontrib-spelling==8.0.2
 sphinxext-opengraph==0.13.0
     # via -r docs/requirements.in
 typing-extensions==4.16.0
-    # via beautifulsoup4
+    # via
+    #   beautifulsoup4
+    #   referencing
 urllib3==2.7.0
     # via requests

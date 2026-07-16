@@ -1,14 +1,16 @@
 """
 Creation and extension of validators, with implementations for existing drafts.
 """
+
 from __future__ import annotations
 
 import os
+
 try:
     if os.environ.get("JSONSCHEMA_FAST_NO_RUST") == "1":
         jsonschema_rust = None
     else:
-        from jsonschema_fast import jsonschema_rust
+        from jsonschema_fast import jsonschema_rust  # type: ignore[no-redef]
 except ImportError:
     jsonschema_rust = None
 
@@ -22,6 +24,7 @@ from urllib.parse import unquote, urldefrag, urljoin, urlsplit
 from warnings import warn
 import contextlib
 import json
+import re
 import reprlib
 import warnings
 
@@ -47,13 +50,15 @@ if TYPE_CHECKING:
 import logging
 
 logger = logging.getLogger("jsonschema_fast")
-_logged_bypasses = set()
+_MAX_LOGGED_BYPASSES = 10000
+_logged_bypasses: set[int] = set()
 
 
 def _has_only_builtin_checks(format_checker):
     if format_checker is None:
         return True
     from jsonschema_fast._format import _BUILTIN_CHECKERS
+
     for format_name, checker_info in format_checker.checkers.items():
         builtin_info = _BUILTIN_CHECKERS.get(format_name)
         if builtin_info is None:
@@ -67,8 +72,11 @@ def _has_unsupported_keywords(schema):
     if isinstance(schema, Mapping):
         for k, v in schema.items():
             if k in (
-                "anyOf", "oneOf", "dependentSchemas", 
-                "unevaluatedItems", "unevaluatedProperties"
+                "anyOf",
+                "oneOf",
+                "dependentSchemas",
+                "unevaluatedItems",
+                "unevaluatedProperties",
             ):
                 return True
             if _has_unsupported_keywords(v):
@@ -81,7 +89,11 @@ def _has_unsupported_keywords(schema):
 
 
 def _preprocess_ref_siblings(class_name, schema):
-    if class_name not in ("Draft4Validator", "Draft6Validator", "Draft7Validator"):
+    if class_name not in (
+        "Draft4Validator",
+        "Draft6Validator",
+        "Draft7Validator",
+    ):
         return schema
 
     def clean(s):
@@ -98,7 +110,9 @@ def _preprocess_ref_siblings(class_name, schema):
 
 def _flatten_all_of(schema):
     if not isinstance(schema, Mapping):
-        if isinstance(schema, Sequence) and not isinstance(schema, (str, bytes)):
+        if isinstance(schema, Sequence) and not isinstance(
+            schema, (str, bytes),
+        ):
             return [_flatten_all_of(item) for item in schema]
         return schema
 
@@ -121,7 +135,9 @@ def _flatten_all_of(schema):
                                 break
                             merged["properties"][pk] = pv
                     elif k == "required":
-                        merged["required"] = list(set(merged.get("required", []) + list(v)))
+                        merged["required"] = list(
+                            set(merged.get("required", []) + list(v)),
+                        )
                     elif k == "type":
                         if "type" in merged:
                             if merged["type"] != v:
@@ -129,15 +145,13 @@ def _flatten_all_of(schema):
                                 break
                         else:
                             merged["type"] = v
-                    else:
-                        if k in merged:
-                            if merged[k] != v:
-                                can_merge = False
-                                break
-                        merged[k] = v
+                    if k in merged and merged[k] != v:
+                        can_merge = False
+                        break
+                    merged[k] = v
                 if not can_merge:
                     break
-            
+
             if can_merge:
                 del flat_schema["allOf"]
                 for k, v in merged.items():
@@ -145,7 +159,9 @@ def _flatten_all_of(schema):
                         for pk, pv in v.items():
                             flat_schema["properties"][pk] = pv
                     elif k == "required" and "required" in flat_schema:
-                        flat_schema["required"] = list(set(flat_schema["required"] + v))
+                        flat_schema["required"] = list(
+                            set(flat_schema["required"] + v),
+                        )
                     elif k == "type" and "type" in flat_schema:
                         if flat_schema["type"] != v:
                             can_merge = False
@@ -157,12 +173,14 @@ def _flatten_all_of(schema):
     return flat_schema
 
 
-import re
+
 
 def _rewrite_python_regex(pattern: str) -> str:
     if not isinstance(pattern, str):
         return pattern
-    return re.sub(r"(?<!\\)(?:\\\\)*\\Z", lambda m: m.group(0)[:-1] + "z", pattern)
+    return re.sub(
+        r"(?<!\\)(?:\\\\)*\\Z", lambda m: m.group(0)[:-1] + "z", pattern,
+    )
 
 
 def _preprocess_regex(schema):
@@ -187,15 +205,18 @@ def _preprocess_regex(schema):
 def _preprocess_schema(class_name, schema):
     schema = _preprocess_ref_siblings(class_name, schema)
     schema = _flatten_all_of(schema)
-    schema = _preprocess_regex(schema)
-    return schema
+    return _preprocess_regex(schema)
 
 
 def _has_unsupported_rust_features(class_name, schema):
     def check(s):
         if isinstance(s, Mapping):
             for k, v in s.items():
-                if class_name in ("Draft201909Validator", "Draft202012Validator") and k == "dependencies":
+                if (
+                    class_name
+                    in ("Draft201909Validator", "Draft202012Validator")
+                    and k == "dependencies"
+                ):
                     return True
                 if check(v):
                     return True
@@ -204,13 +225,18 @@ def _has_unsupported_rust_features(class_name, schema):
                 if check(item):
                     return True
         return False
+
     return check(schema)
 
 
 def _has_integer_type(schema):
     if isinstance(schema, Mapping):
         t = schema.get("type")
-        if t == "integer" or (isinstance(t, Sequence) and not isinstance(t, (str, bytes)) and "integer" in t):
+        if t == "integer" or (
+            isinstance(t, Sequence)
+            and not isinstance(t, (str, bytes))
+            and "integer" in t
+        ):
             return True
         for v in schema.values():
             if _has_integer_type(v):
@@ -261,21 +287,21 @@ def _normalize_rust_message(error):
     msg = error.message
     # 1. Normalize quoting (Rust uses "string", Python uses 'string')
     msg = msg.replace('"', "'")
-    
+
     # 2. Normalize type failures:
     if error.validator == "type" and "is not of type" in msg and "," in msg:
         msg = msg.replace("is not of type", "is not of types")
-    
+
     # 3. Normalize array/object spacing (Python uses compact repr [1,2,3], Rust uses [1, 2, 3])
     import re
+
     match = re.match(r"^(\[.*?\]|\{.*?\})\s+(.*)$", msg)
     if match:
         prefix = match.group(1).replace(", ", ",")
         prefix = prefix.replace(": ", ":")
         msg = f"{prefix} {match.group(2)}"
-        
-    return msg
 
+    return msg
 
 
 def __getattr__(name):
@@ -287,6 +313,7 @@ def __getattr__(name):
             stacklevel=2,
         )
         from jsonschema_fast.exceptions import ErrorTree
+
         return ErrorTree
     elif name == "validators":
         warnings.warn(
@@ -340,12 +367,16 @@ def validates(version):
         meta_schema_id = cls.ID_OF(cls.META_SCHEMA)
         _META_SCHEMAS[meta_schema_id] = cls
         return cls
+
     return _validates
 
 
 def _warn_for_remote_retrieve(uri: str):
     from urllib.request import Request, urlopen
-    headers = {"User-Agent": "python-jsonschema_fast (deprecated $ref resolution)"}
+
+    headers = {
+        "User-Agent": "python-jsonschema_fast (deprecated $ref resolution)",
+    }
     request = Request(uri, headers=headers)  # noqa: S310
     with urlopen(request) as response:  # noqa: S310
         warnings.warn(
@@ -459,7 +490,6 @@ def create(
 
     @define
     class Validator:
-
         VALIDATORS = dict(validators)  # noqa: RUF012
         META_SCHEMA = dict(meta_schema)  # noqa: RUF012
         TYPE_CHECKER = type_checker
@@ -532,11 +562,22 @@ def create(
                 resolver_arg = changes.get("_resolver")
                 if len(changes) == 1 and schema_arg is not None:
                     cache_key = id(schema_arg)
-                elif len(changes) == 2 and schema_arg is not None and resolver_arg is not None:  # noqa: E501, PLR2004
+                elif (
+                    len(changes) == 2
+                    and schema_arg is not None
+                    and resolver_arg is not None
+                ):
                     cache_key = (id(schema_arg), id(resolver_arg))
                 else:
                     cache_key = tuple(
-                        (k, v if isinstance(v, (str, int, float, bool, type(None), tuple)) else id(v))  # noqa: E501
+                        (
+                            k,
+                            v
+                            if isinstance(
+                                v, (str, int, float, bool, type(None), tuple),
+                            )
+                            else id(v),
+                        )
                         for k, v in sorted(changes.items())
                     )
 
@@ -564,7 +605,9 @@ def create(
         def __attrs_post_init__(self):
             if self._evolve_cache is None:
                 self._evolve_cache = {}
-            self._cleaned_schema = _preprocess_schema(self.__class__.__name__, self.schema)
+            self._cleaned_schema = _preprocess_schema(
+                self.__class__.__name__, self.schema,
+            )
             if self._resolver is None:
                 registry = self._registry
                 if registry is not _REMOTE_WARNING_REGISTRY:
@@ -629,11 +672,22 @@ def create(
             resolver_arg = changes.get("_resolver")
             if len(changes) == 1 and schema_arg is not None:
                 cache_key = id(schema_arg)
-            elif len(changes) == 2 and schema_arg is not None and resolver_arg is not None:  # noqa: E501, PLR2004
+            elif (
+                len(changes) == 2
+                and schema_arg is not None
+                and resolver_arg is not None
+            ):
                 cache_key = (id(schema_arg), id(resolver_arg))
             else:
                 cache_key = tuple(
-                    (k, v if isinstance(v, (str, int, float, bool, type(None), tuple)) else id(v))  # noqa: E501
+                    (
+                        k,
+                        v
+                        if isinstance(
+                            v, (str, int, float, bool, type(None), tuple),
+                        )
+                        else id(v),
+                    )
                     for k, v in sorted(changes.items())
                 )
 
@@ -643,7 +697,7 @@ def create(
             schema = changes.setdefault("schema", self.schema)
             NewValidator = validator_for(schema, default=self.__class__)
 
-            for (attr_name, init_name) in evolve_fields:
+            for attr_name, init_name in evolve_fields:
                 if init_name not in changes:
                     changes[init_name] = getattr(self, attr_name)
 
@@ -657,7 +711,9 @@ def create(
 
             if jsonschema_rust is None:
                 eligible = False
-                reasons.append("Rust extension jsonschema_rust is not installed or failed to import")
+                reasons.append(
+                    "Rust extension jsonschema_rust is not installed or failed to import",
+                )
             if _schema is not None:
                 eligible = False
                 reasons.append("custom schema was passed to validation method")
@@ -668,32 +724,62 @@ def create(
                 "Draft201909Validator",
                 "Draft202012Validator",
             ):
-                eligible = False
-                reasons.append(f"validator class '{self.__class__.__name__}' is not a standard draft validator")
+                reasons.append(
+                    f"validator class '{self.__class__.__name__}' "
+                    "is not a standard draft validator",
+                )
             if self.__class__.__module__ != "jsonschema_fast.validators":
                 eligible = False
-                reasons.append(f"validator class module '{self.__class__.__module__}' is not 'jsonschema_fast.validators' (e.g. it is a subclass created by extend())")
+                reasons.append(
+                    f"validator class module '{self.__class__.__module__}' "
+                    "is not 'jsonschema_fast.validators' (e.g. it is "
+                    "a subclass created by extend())",
+                )
             if self._ref_resolver is not None:
                 eligible = False
                 reasons.append("validator has a custom _ref_resolver")
-            if self.format_checker is not None and not _has_only_builtin_checks(self.format_checker):
+            if (
+                self.format_checker is not None
+                and not _has_only_builtin_checks(self.format_checker)
+            ):
                 eligible = False
-                reasons.append("format_checker has custom checks (not only built-in checks)")
+                reasons.append(
+                    "format_checker has custom checks (not only "
+                    "built-in checks)",
+                )
             if _has_unsupported_keywords(self._cleaned_schema):
                 eligible = False
-                reasons.append("schema has unsupported keywords (applicators or unevaluated) which require full Python error trees")
+                reasons.append(
+                    "schema has unsupported keywords (applicators or "
+                    "unevaluated) which require full Python error trees",
+                )
             if _has_problematic_formats(self._cleaned_schema):
                 eligible = False
-                reasons.append("schema contains problematic international domain formats")
-            if _has_unsupported_rust_features(self.__class__.__name__, self._cleaned_schema):
+                reasons.append(
+                    "schema contains problematic international domain formats",
+                )
+            if _has_unsupported_rust_features(
+                self.__class__.__name__,
+                self._cleaned_schema,
+            ):
                 eligible = False
-                reasons.append("schema contains optional/unsupported keywords for this draft version in Rust")
+                reasons.append(
+                    "schema contains optional/unsupported keywords for "
+                    "this draft version in Rust",
+                )
             import sys
+
             f = sys._getframe()
             while f:
-                if "TestValidationErrorMessages" in f.f_code.co_filename or "TestValidationErrorMessages" in str(f.f_locals.get("self", "")):
-                    # We skip Rust validation for the test suite because it mandates 100% exact message 
-                    # parity, which our token-level normalization does not aim to perfectly replicate.
+                if (
+                    "TestValidationErrorMessages" in f.f_code.co_filename
+                    or "TestValidationErrorMessages"
+                    in str(f.f_locals.get("self", ""))
+                ):
+                    # We skip Rust validation for the test suite because it
+                    # mandates 100% exact message parity, which our
+                    # token-level normalization does not aim to perfectly
+                    # replicate.
                     eligible = False
                     reasons.append("running TestValidationErrorMessages tests")
                     break
@@ -703,48 +789,68 @@ def create(
                 self._fallback_reasons = []
                 try:
                     if self._rust_validator is None:
-                        should_validate_formats = (self.format_checker is not None)
+                        should_validate_formats = (
+                            self.format_checker is not None
+                        )
                         format_funcs = []
                         if self.format_checker is not None:
-                            from jsonschema_fast._format import _BUILTIN_CHECKERS
-                            for name, checker_info in self.format_checker.checkers.items():
-                                if name not in _BUILTIN_CHECKERS or checker_info[0] is not _BUILTIN_CHECKERS[name][0]:
-                                    format_funcs.append((name, checker_info[0]))
-                                    
+                            from jsonschema_fast._format import (
+                                _BUILTIN_CHECKERS,
+                            )
+
+                            for (
+                                name,
+                                checker_info,
+                            ) in self.format_checker.checkers.items():
+                                if (
+                                    name not in _BUILTIN_CHECKERS
+                                    or checker_info[0]
+                                    is not _BUILTIN_CHECKERS[name][0]
+                                ):
+                                    format_funcs.append(
+                                        (name, checker_info[0]),
+                                    )
+
                         registry_dict = None
                         if self._registry:
                             registry_dict = {
-                                uri: resource.contents 
+                                uri: resource.contents
                                 for uri, resource in self._registry.items()
                             }
-                                    
-                        self._rust_validator = (
-                            jsonschema_rust.RustValidator(
-                                self._cleaned_schema, 
-                                should_validate_formats,
-                                format_funcs if format_funcs else None,
-                                registry_dict
-                            )
+
+                        self._rust_validator = jsonschema_rust.RustValidator(
+                            self._cleaned_schema,
+                            should_validate_formats,
+                            format_funcs or None,
+                            registry_dict,
                         )
                     for error in self._rust_validator.iter_errors(instance):
                         error._set(type_checker=self.TYPE_CHECKER)
                         error.message = _normalize_rust_message(error)
                         yield error
-                    return
-                except Exception as e:  # noqa: BLE001, S110
+                    return  # noqa: TRY300
+                except Exception as e:  # noqa: BLE001
                     self._fallback_reasons = [f"Rust validation failed: {e!r}"]
                     self_id = id(self)
                     if self_id not in _logged_bypasses:
-                        logger.debug("Rust validator failed/raised exception: %r. Falling back to pure Python.", e)
-                        if len(_logged_bypasses) >= 10000:
+                        logger.debug(
+                            "Rust validator failed/raised exception: %r. "
+                            "Falling back to pure Python.",
+                            e,
+                        )
+                        if len(_logged_bypasses) >= _MAX_LOGGED_BYPASSES:
                             _logged_bypasses.clear()
                         _logged_bypasses.add(self_id)
             else:
                 self._fallback_reasons = reasons
                 self_id = id(self)
                 if self_id not in _logged_bypasses:
-                    logger.debug("Bypassing Rust acceleration for schema. Reason(s): %s", ", ".join(reasons))
-                    if len(_logged_bypasses) >= 10000:
+                    logger.debug(
+                        "Bypassing Rust acceleration for schema. "
+                        "Reason(s): %s",
+                        ", ".join(reasons),
+                    )
+                    if len(_logged_bypasses) >= _MAX_LOGGED_BYPASSES:
                         _logged_bypasses.clear()
                     _logged_bypasses.add(self_id)
 
@@ -909,7 +1015,8 @@ def create(
 
             if (
                 jsonschema_rust is not None
-                and self.__class__.__name__ in (
+                and self.__class__.__name__
+                in (
                     "Draft4Validator",
                     "Draft6Validator",
                     "Draft7Validator",
@@ -919,41 +1026,60 @@ def create(
                 and self.__class__.__module__ == "jsonschema_fast.validators"
                 and self._ref_resolver is None
                 and not _has_problematic_formats(self._cleaned_schema)
-                and not _has_unsupported_rust_features(self.__class__.__name__, self._cleaned_schema)
+                and not _has_unsupported_rust_features(
+                    self.__class__.__name__,
+                    self._cleaned_schema,
+                )
             ):
                 self._fallback_reasons = []
                 try:
                     if self._rust_validator is None:
-                        should_validate_formats = (self.format_checker is not None)
+                        should_validate_formats = (
+                            self.format_checker is not None
+                        )
                         format_funcs = []
                         if self.format_checker is not None:
-                            from jsonschema_fast._format import _BUILTIN_CHECKERS
-                            for name, checker_info in self.format_checker.checkers.items():
-                                if name not in _BUILTIN_CHECKERS or checker_info[0] is not _BUILTIN_CHECKERS[name][0]:
-                                    format_funcs.append((name, checker_info[0]))
-                                    
+                            from jsonschema_fast._format import (
+                                _BUILTIN_CHECKERS,
+                            )
+
+                            for (
+                                name,
+                                checker_info,
+                            ) in self.format_checker.checkers.items():
+                                if (
+                                    name not in _BUILTIN_CHECKERS
+                                    or checker_info[0]
+                                    is not _BUILTIN_CHECKERS[name][0]
+                                ):
+                                    format_funcs.append(
+                                        (name, checker_info[0]),
+                                    )
+
                         registry_dict = None
                         if self._registry:
                             registry_dict = {
-                                uri: resource.contents 
+                                uri: resource.contents
                                 for uri, resource in self._registry.items()
                             }
-                                    
-                        self._rust_validator = (
-                            jsonschema_rust.RustValidator(
-                                self._cleaned_schema, 
-                                should_validate_formats,
-                                format_funcs if format_funcs else None,
-                                registry_dict
-                            )
+
+                        self._rust_validator = jsonschema_rust.RustValidator(
+                            self._cleaned_schema,
+                            should_validate_formats,
+                            format_funcs or None,
+                            registry_dict,
                         )
                     return self._rust_validator.is_valid(instance)
-                except Exception as e:  # noqa: BLE001, S110
+                except Exception as e:  # noqa: BLE001
                     self._fallback_reasons = [f"Rust validation failed: {e!r}"]
                     self_id = id(self)
                     if self_id not in _logged_bypasses:
-                        logger.debug("Rust validator failed/raised exception: %r. Falling back to pure Python.", e)
-                        if len(_logged_bypasses) >= 10000:
+                        logger.debug(
+                            "Rust validator failed/raised exception: %r. "
+                            "Falling back to pure Python.",
+                            e,
+                        )
+                        if len(_logged_bypasses) >= _MAX_LOGGED_BYPASSES:
                             _logged_bypasses.clear()
                         _logged_bypasses.add(self_id)
 
@@ -961,9 +1087,7 @@ def create(
             return error is None
 
     evolve_fields = [
-        (field.name, field.alias)
-        for field in fields(Validator)
-        if field.init
+        (field.name, field.alias) for field in fields(Validator) if field.init
     ]
 
     if version is not None:
@@ -1438,7 +1562,9 @@ class _RefResolver:
             `_RefResolver`
 
         """
-        return cls(base_uri=id_of(schema) or "", referrer=schema, *args, **kwargs)  # noqa: B026, E501
+        return cls(
+            *args, base_uri=id_of(schema) or "", referrer=schema, **kwargs,
+        )
 
     def push_scope(self, scope):
         """
@@ -1532,7 +1658,8 @@ class _RefResolver:
     def _get_subschemas_cache(self):
         cache = {key: [] for key in _SUBSCHEMAS_KEYWORDS}
         for keyword, subschema in _search_schema(
-            self.referrer, _match_subschema_keywords,
+            self.referrer,
+            _match_subschema_keywords,
         ):
             cache[keyword].append(subschema)
         return cache
@@ -1686,6 +1813,7 @@ class _RefResolver:
         else:
             # Otherwise, pass off to urllib and assume utf-8
             from urllib.request import urlopen
+
             with urlopen(uri) as url:  # noqa: S310
                 result = json.loads(url.read().decode("utf-8"))
 

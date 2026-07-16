@@ -15,9 +15,9 @@ try:
     import importlib.metadata as _importlib_metadata
 except ImportError:
     try:
-        import importlib_metadata as _importlib_metadata
+        import importlib_metadata as _importlib_metadata  # type: ignore[no-redef]
     except ImportError:
-        _importlib_metadata = None
+        _importlib_metadata = None  # type: ignore[assignment]
 
 if _importlib_metadata is not None:
     try:
@@ -29,7 +29,7 @@ if _importlib_metadata is not None:
                 UserWarning,
                 stacklevel=2,
             )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
 from jsonschema_fast._format import FormatChecker

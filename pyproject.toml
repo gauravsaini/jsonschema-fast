@@ -121,6 +121,9 @@ exclude = ["jsonschema_fast/benchmarks/*"]
 line-length = 79
 extend-exclude = [
   "json",
+  "scratch",
+  "jsonschema",
+  "run_black_box_tests.py",
   "test_rust_poc.py",
   "benchmark_invalid.py",
   "benchmark_large.py",
@@ -154,6 +157,7 @@ ignore = [
   "D406",    # Section headers should end with a colon not a newline
   "D407",    # Underlines aren't needed
   "D412",    # Plz spaces after section headers
+  "E501",    # Line length check is disabled globally
   "EM101",   # These don't bother me, it's fine there's some duplication.
   "EM102",
   "FBT",     # It's worth avoiding boolean args but I don't care to enforce it
@@ -194,6 +198,7 @@ from-first = true
 [tool.ruff.lint.per-file-ignores]
 "noxfile.py" = ["ANN", "D100", "S101", "T201"]
 "docs/*" = ["ANN", "D", "INP001"]
+"jsonschema_fast/validators.py" = ["PLR2004"]
 "jsonschema_fast/tests/*" = [
   "ANN",
   "D",

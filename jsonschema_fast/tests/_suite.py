@@ -248,7 +248,7 @@ class _Test:
         reason = skip(self)
         if reason is None or os.environ.get("JSON_SCHEMA_DEBUG", "0") != "0":
             return fn
-        elif os.environ.get("JSON_SCHEMA_EXPECTED_FAILURES", "0") != "0":  # pragma: no cover  # noqa: E501
+        elif os.environ.get("JSON_SCHEMA_EXPECTED_FAILURES", "0") != "0":  # pragma: no cover
             return unittest.expectedFailure(fn)
         else:
             return unittest.skip(reason)(fn)
