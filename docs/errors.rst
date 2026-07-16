@@ -2,7 +2,7 @@
 Handling Validation Errors
 ==========================
 
-.. currentmodule:: jsonschema.exceptions
+.. currentmodule:: jsonschema_fast.exceptions
 
 When an invalid instance is encountered, a `ValidationError` will be
 raised or returned, depending on which method or function is used.
@@ -112,7 +112,7 @@ raised or returned, depending on which method or function is used.
         If the error was caused by a *non*-validation error, the
         exception object will be here. Currently this is only used
         for the exception raised by a failed format checker in
-        `jsonschema.FormatChecker.check`.
+        `jsonschema_fast.FormatChecker.check`.
 
     .. attribute:: parent
 
@@ -228,9 +228,9 @@ ErrorTrees
 
 If you want to programmatically query which validation keywords
 failed when validating a given instance, you may want to do so using
-`jsonschema.exceptions.ErrorTree` objects.
+`jsonschema_fast.exceptions.ErrorTree` objects.
 
-.. autoclass:: jsonschema.exceptions.ErrorTree
+.. autoclass:: jsonschema_fast.exceptions.ErrorTree
     :noindex:
     :members:
     :special-members:
@@ -238,7 +238,7 @@ failed when validating a given instance, you may want to do so using
 
     .. attribute:: errors
 
-        The mapping of validation keywords to the error objects (usually `jsonschema.exceptions.ValidationError`\s) at this level of the tree.
+        The mapping of validation keywords to the error objects (usually `jsonschema_fast.exceptions.ValidationError`\s) at this level of the tree.
 
 Consider the following example:
 
@@ -265,16 +265,16 @@ For clarity's sake, the given instance has three errors under this schema:
     'spam' is not one of [1, 2, 3]
     ['spam', 2] is too short
 
-Let's construct an `jsonschema.exceptions.ErrorTree` so that we
+Let's construct an `jsonschema_fast.exceptions.ErrorTree` so that we
 can query the errors a bit more easily than by just iterating over the
 error objects.
 
 .. testcode::
 
-    from jsonschema.exceptions import ErrorTree
+    from jsonschema_fast.exceptions import ErrorTree
     tree = ErrorTree(v.iter_errors(instance))
 
-As you can see, `jsonschema.exceptions.ErrorTree` takes an iterable of `ValidationError`\s when constructing a tree so you can directly pass it the return value of a validator's `jsonschema.protocols.Validator.iter_errors` method.
+As you can see, `jsonschema_fast.exceptions.ErrorTree` takes an iterable of `ValidationError`\s when constructing a tree so you can directly pass it the return value of a validator's `jsonschema_fast.protocols.Validator.iter_errors` method.
 
 `ErrorTree`\s support a number of useful operations. The first one we
 might want to perform is to check whether a given element in our instance
@@ -348,8 +348,8 @@ to guess the most relevant error in a given bunch.
 
 .. doctest::
 
-        >>> from jsonschema import Draft202012Validator
-        >>> from jsonschema.exceptions import best_match
+        >>> from jsonschema_fast import Draft202012Validator
+        >>> from jsonschema_fast.exceptions import best_match
 
         >>> schema = {
         ...     "type": "array",

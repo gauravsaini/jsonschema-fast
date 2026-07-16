@@ -14,7 +14,7 @@ Schema Validation
 The Basics
 ----------
 
-The simplest way to validate an instance under a given schema is to use the `validate <jsonschema.validators.validate>` function.
+The simplest way to validate an instance under a given schema is to use the `validate <jsonschema_fast.validators.validate>` function.
 
 .. autofunction:: validate
     :noindex:
@@ -35,14 +35,14 @@ The Validator Protocol
 
     If you are unfamiliar with protocols, either as a general notion or as specifically implemented by `typing.Protocol`, you can think of them as a set of attributes and methods that all objects satisfying the protocol have.
 
-    Here, in the context of `jsonschema`, the `Validator.iter_errors` method can be called on `jsonschema.validators.Draft202012Validator`, or `jsonschema.validators.Draft7Validator`, or indeed any validator class, as all of them have it, along with all of the other methods described below.
+    Here, in the context of `jsonschema`, the `Validator.iter_errors` method can be called on `jsonschema_fast.validators.Draft202012Validator`, or `jsonschema_fast.validators.Draft7Validator`, or indeed any validator class, as all of them have it, along with all of the other methods described below.
 
-.. autoclass:: jsonschema.protocols.Validator
+.. autoclass:: jsonschema_fast.protocols.Validator
     :noindex:
     :members:
 
-All of the `versioned validators <versioned-validators>` that are included with `jsonschema` adhere to the protocol, and any `extensions of these validators <jsonschema.validators.extend>` will as well.
-For more information on `creating <jsonschema.validators.create>` or `extending <jsonschema.validators.extend>` validators see `creating-validators`.
+All of the `versioned validators <versioned-validators>` that are included with `jsonschema` adhere to the protocol, and any `extensions of these validators <jsonschema_fast.validators.extend>` will as well.
+For more information on `creating <jsonschema_fast.validators.create>` or `extending <jsonschema_fast.validators.extend>` validators see `creating-validators`.
 
 Type Checking
 -------------
@@ -63,11 +63,11 @@ versions.
     :members:
     :noindex:
 
-.. autoexception:: jsonschema.exceptions.UndefinedTypeCheck
+.. autoexception:: jsonschema_fast.exceptions.UndefinedTypeCheck
     :noindex:
 
     Raised when trying to remove a type check that is not known to this
-    TypeChecker, or when calling `jsonschema.TypeChecker.is_type`
+    TypeChecker, or when calling `jsonschema_fast.TypeChecker.is_type`
     directly.
 
 .. _validating-types:
@@ -92,12 +92,12 @@ given how common validating these types are.
 
 If you *do* want the generality, or just want to add a few specific additional
 types as being acceptable for a validator object, then you should update an
-existing `jsonschema.TypeChecker` or create a new one. You may then create a new
-`Validator` via `jsonschema.validators.extend`.
+existing `jsonschema_fast.TypeChecker` or create a new one. You may then create a new
+`Validator` via `jsonschema_fast.validators.extend`.
 
 .. testcode::
 
-    from jsonschema import validators
+    from jsonschema_fast import validators
 
     class MyInteger:
         pass
@@ -119,7 +119,7 @@ existing `jsonschema.TypeChecker` or create a new one. You may then create a new
     validator = CustomValidator(schema={"type" : "number"})
 
 
-.. autoexception:: jsonschema.exceptions.UnknownType
+.. autoexception:: jsonschema_fast.exceptions.UnknownType
     :noindex:
 
 .. _versioned-validators:
@@ -156,7 +156,7 @@ Draft 2020-12 meta-schema, you could use:
 
 .. testcode::
 
-    from jsonschema import Draft202012Validator
+    from jsonschema_fast import Draft202012Validator
 
     schema = {
         "$schema": Draft202012Validator.META_SCHEMA["$id"],
@@ -178,7 +178,7 @@ Validating Formats
 
 JSON Schema defines the :kw:`format` keyword which can be used to check if primitive types (``string``\s, ``number``\s, ``boolean``\s) conform to well-defined formats.
 By default, as per the specification, no validation is enforced.
-Optionally however, validation can be enabled by hooking a `format-checking object <jsonschema.FormatChecker>` into a `Validator`.
+Optionally however, validation can be enabled by hooking a `format-checking object <jsonschema_fast.FormatChecker>` into a `Validator`.
 
 .. doctest::
 
@@ -277,14 +277,14 @@ The supported mechanism for ensuring these dependencies are present is again as 
         :argument Exception raises: the exception(s) raised
             by the decorated function when an invalid instance is
             found. The exception object will be accessible as the
-            `jsonschema.exceptions.ValidationError.cause` attribute
+            `jsonschema_fast.exceptions.ValidationError.cause` attribute
             of the resulting validation error.
 
         .. deprecated:: v4.14.0
 
             Use `FormatChecker.checks` on an instance instead.
 
-.. autoexception:: jsonschema.exceptions.FormatError
+.. autoexception:: jsonschema_fast.exceptions.FormatError
     :noindex:
     :members:
 

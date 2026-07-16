@@ -50,6 +50,22 @@ _TYPE_ALIASES = {
 
 
 def _resolve_broken_refs(app, env, node, contnode):
+    target = node["reftarget"]
+    if target == "jsonschema" or target.startswith("jsonschema."):
+        new_target = target.replace("jsonschema", "jsonschema_fast", 1)
+        node["reftarget"] = new_target
+        res = app.env.get_domain("py").resolve_xref(
+            env,
+            node["refdoc"],
+            app.builder,
+            "mod" if new_target == "jsonschema_fast" else node["reftype"],
+            new_target,
+            node,
+            contnode,
+        )
+        if res:
+            return res
+
     if node["refdomain"] != "py":
         return
 
