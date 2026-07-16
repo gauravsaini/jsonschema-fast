@@ -69,7 +69,7 @@ def __getattr__(name):
                 return _metadata.version(dist_name)
             except _metadata.PackageNotFoundError:
                 continue
-        return "1.0.1"
+        return "1.0.2"
     elif name == "RefResolver":
         from jsonschema_fast.validators import _RefResolver
         _warnings.warn(
