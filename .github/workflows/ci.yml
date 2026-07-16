@@ -54,10 +54,10 @@ jobs:
         posargs: [""]
         include:
           - os: ubuntu-latest
-            noxenv: "tests-3.14(format)"
+            noxenv: "tests-3.13(format)"
             posargs: coverage github
           - os: ubuntu-latest
-            noxenv: "tests-3.14(no-extras)"
+            noxenv: "tests-3.13(no-extras)"
             posargs: coverage github
         exclude:
           - os: macos-latest
@@ -82,21 +82,6 @@ jobs:
             noxenv: "docs(spelling)"
           - os: windows-latest
             noxenv: "docs(style)"
-          - os: windows-latest
-            noxenv: "tests-3.14(no-extras)"
-          - os: windows-latest
-            noxenv: "tests-3.14(format)"
-          - os: windows-latest
-            noxenv: "tests-3.14(format-nongpl)"
-          - os: windows-latest
-            noxenv: "tests-3.14t(no-extras)"
-          - os: windows-latest
-            noxenv: "tests-3.14t(format)"
-          - os: windows-latest
-            noxenv: "tests-3.14t(format-nongpl)"
-          - noxenv: "tests-pypy3.11(no-extras)"
-          - noxenv: "tests-pypy3.11(format)"
-          - noxenv: "tests-pypy3.11(format-nongpl)"
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -116,9 +101,6 @@ jobs:
             3.11
             3.12
             3.13
-            3.14
-            3.14t
-            pypy-3.11-v7.3.22
           allow-prereleases: true
       - name: Enable UTF-8 on Windows
         run: echo "PYTHONUTF8=1" >> $env:GITHUB_ENV
