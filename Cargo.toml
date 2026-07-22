@@ -10,7 +10,15 @@ crate-type = ["cdylib"]
 [dependencies]
 pyo3 = { version = "0.22.2", features = ["extension-module"] }
 pythonize = "0.22.0"
-jsonschema = "0.26.1"
+jsonschema = "0.29.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rayon = "1.10"
+mimalloc = { version = "0.1", default-features = false }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+opt-level = 3
+

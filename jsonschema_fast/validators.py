@@ -1086,6 +1086,129 @@ def create(
             error = next(self.iter_errors(instance), None)
             return error is None
 
+        def is_valid_json(self, instance_json):
+            if (
+                jsonschema_rust is not None
+                and self.__class__.__name__
+                in (
+                    "Draft4Validator",
+                    "Draft6Validator",
+                    "Draft7Validator",
+                    "Draft201909Validator",
+                    "Draft202012Validator",
+                )
+                and self.__class__.__module__ == "jsonschema_fast.validators"
+                and self._ref_resolver is None
+                and not _has_problematic_formats(self._cleaned_schema)
+                and not _has_unsupported_rust_features(
+                    self.__class__.__name__,
+                    self._cleaned_schema,
+                )
+            ):
+                try:
+                    if self._rust_validator is None:
+                        should_validate_formats = (
+                            self.format_checker is not None
+                        )
+                        format_funcs = []
+                        if self.format_checker is not None:
+                            from jsonschema_fast._format import _BUILTIN_CHECKERS
+
+                            for name, checker_info in self.format_checker.checkers.items():
+                                if (
+                                    name not in _BUILTIN_CHECKERS
+                                    or checker_info[0] is not _BUILTIN_CHECKERS[name][0]
+                                ):
+                                    format_funcs.append((name, checker_info[0]))
+
+                        registry_dict = None
+                        if self._registry:
+                            registry_dict = {
+                                uri: resource.contents
+                                for uri, resource in self._registry.items()
+                            }
+
+                        self._rust_validator = jsonschema_rust.RustValidator(
+                            self._cleaned_schema,
+                            should_validate_formats,
+                            format_funcs or None,
+                            registry_dict,
+                        )
+                    if isinstance(instance_json, bytes):
+                        return self._rust_validator.is_valid_bytes(instance_json)
+                    elif isinstance(instance_json, str):
+                        return self._rust_validator.is_valid_json_str(instance_json)
+                except Exception:
+                    pass
+
+            if isinstance(instance_json, (str, bytes)):
+                data = json.loads(instance_json)
+            else:
+                data = instance_json
+            return self.is_valid(data)
+
+        def validate_json(self, instance_json):
+            if (
+                jsonschema_rust is not None
+                and self.__class__.__name__
+                in (
+                    "Draft4Validator",
+                    "Draft6Validator",
+                    "Draft7Validator",
+                    "Draft201909Validator",
+                    "Draft202012Validator",
+                )
+                and self.__class__.__module__ == "jsonschema_fast.validators"
+                and self._ref_resolver is None
+                and not _has_problematic_formats(self._cleaned_schema)
+                and not _has_unsupported_rust_features(
+                    self.__class__.__name__,
+                    self._cleaned_schema,
+                )
+            ):
+                try:
+                    if self._rust_validator is None:
+                        should_validate_formats = (
+                            self.format_checker is not None
+                        )
+                        format_funcs = []
+                        if self.format_checker is not None:
+                            from jsonschema_fast._format import _BUILTIN_CHECKERS
+
+                            for name, checker_info in self.format_checker.checkers.items():
+                                if (
+                                    name not in _BUILTIN_CHECKERS
+                                    or checker_info[0] is not _BUILTIN_CHECKERS[name][0]
+                                ):
+                                    format_funcs.append((name, checker_info[0]))
+
+                        registry_dict = None
+                        if self._registry:
+                            registry_dict = {
+                                uri: resource.contents
+                                for uri, resource in self._registry.items()
+                            }
+
+                        self._rust_validator = jsonschema_rust.RustValidator(
+                            self._cleaned_schema,
+                            should_validate_formats,
+                            format_funcs or None,
+                            registry_dict,
+                        )
+                    if isinstance(instance_json, bytes):
+                        return self._rust_validator.validate_bytes(instance_json)
+                    elif isinstance(instance_json, str):
+                        return self._rust_validator.validate_json_str(instance_json)
+                except Exception:
+                    pass
+
+            if isinstance(instance_json, (str, bytes)):
+                data = json.loads(instance_json)
+            else:
+                data = instance_json
+            return self.validate(data)
+
+
     evolve_fields = [
         (field.name, field.alias) for field in fields(Validator) if field.init
     ]

@@ -1,10 +1,20 @@
 use pyo3::prelude::*;
-use pythonize::depythonize;
+use pythonize::{depythonize, pythonize};
 use jsonschema::Validator as CrateValidator;
 use jsonschema::error::ValidationErrorKind;
 use serde_json::Value;
 use std::str::FromStr;
 use rayon::prelude::*;
+use std::cell::RefCell;
+
+#[cfg(not(any(target_arch = "arm", target_os = "freebsd", target_family = "wasm")))]
+#[global_allocator]
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+thread_local! {
+    static PARSE_BUF: RefCell<Vec<u8>> = RefCell::new(Vec::with_capacity(256 * 1024));
+}
+
 
 fn pyany_to_value(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<Value> {
     if let Ok(d) = obj.downcast::<pyo3::types::PyDict>() {
@@ -259,13 +269,13 @@ fn get_compiled_validator(
         }
     }
     
-    let mut options = jsonschema::options();
-    options.should_validate_formats(should_validate_formats);
+    let mut options = jsonschema::options().should_validate_formats(should_validate_formats);
+
     
     if let Some(funcs) = format_funcs {
         for (name, func_obj) in funcs {
             let leaked_name: &'static str = Box::leak(name.into_boxed_str());
-            options.with_format(leaked_name, move |s: &str| -> bool {
+            options = options.with_format(leaked_name, move |s: &str| -> bool {
                 Python::with_gil(|py| {
                     if let Ok(res) = func_obj.call1(py, (s,)) {
                         if let Ok(b) = res.is_truthy(py) {
@@ -281,10 +291,11 @@ fn get_compiled_validator(
     if let Some(resources) = registry_resources {
         for (uri, schema_val) in resources {
             if let Ok(resource) = jsonschema::Resource::from_contents(schema_val) {
-                options.with_resource(uri, resource);
+                options = options.with_resource(uri, resource);
             }
         }
     }
+
     
     match options.build(schema) {
         Ok(val) => {
@@ -498,7 +509,12 @@ fn make_python_validation_error(
 
     let kwargs = pyo3::types::PyDict::new_bound(py);
     kwargs.set_item("message", &err.message)?;
-    kwargs.set_item("validator", &err.validator)?;
+    if err.validator == "false" {
+        kwargs.set_item("validator", py.None())?;
+    } else {
+        kwargs.set_item("validator", &err.validator)?;
+    }
+
     kwargs.set_item("path", &path_py)?;
     kwargs.set_item("instance", sub_instance)?;
     kwargs.set_item("schema", schema)?;
@@ -646,7 +662,12 @@ impl RustValidator {
             
             let kwargs = pyo3::types::PyDict::new_bound(py);
             kwargs.set_item("message", &message)?;
-            kwargs.set_item("validator", validator)?;
+            if validator == "false" {
+                kwargs.set_item("validator", py.None())?;
+            } else {
+                kwargs.set_item("validator", validator)?;
+            }
+
             kwargs.set_item("path", &path_py)?;
             kwargs.set_item("instance", sub_instance)?;
             kwargs.set_item("schema", schema_bound)?;
@@ -749,13 +770,48 @@ impl RustValidator {
 
     fn is_valid(&self, py: Python<'_>, instance: &Bound<'_, PyAny>) -> PyResult<bool> {
         let instance_json: Value = pyany_to_value(py, instance)?;
-        
-        // 1. Prepare tasks
+        Ok(self.is_valid_value(&instance_json))
+    }
+
+    fn validate_bytes(&self, py: Python<'_>, bytes: &[u8]) -> PyResult<()> {
+        let instance_json: Value = serde_json::from_slice(bytes).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid JSON: {}", e))
+        })?;
+        if self.is_valid_value(&instance_json) {
+            Ok(())
+        } else {
+            let py_instance = pythonize(py, &instance_json).map_err(|e| {
+                PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Pythonize error: {}", e))
+            })?;
+            self.validate(py, &py_instance)
+
+        }
+    }
+
+    fn is_valid_bytes(&self, _py: Python<'_>, bytes: &[u8]) -> PyResult<bool> {
+        let instance_json: Value = match serde_json::from_slice(bytes) {
+            Ok(v) => v,
+            Err(_) => return Ok(false),
+        };
+        Ok(self.is_valid_value(&instance_json))
+    }
+
+    fn validate_json_str(&self, py: Python<'_>, json_str: &str) -> PyResult<()> {
+        self.validate_bytes(py, json_str.as_bytes())
+    }
+
+    fn is_valid_json_str(&self, py: Python<'_>, json_str: &str) -> PyResult<bool> {
+        self.is_valid_bytes(py, json_str.as_bytes())
+    }
+}
+
+impl RustValidator {
+    fn is_valid_value(&self, instance_json: &Value) -> bool {
         let mut tasks = Vec::new();
         for spec in &self.specs {
             let mut arrays = Vec::new();
             let mut current_instance_path = Vec::new();
-            get_arrays_to_validate(&instance_json, &spec.instance_path, 0, &mut current_instance_path, &mut arrays);
+            get_arrays_to_validate(instance_json, &spec.instance_path, 0, &mut current_instance_path, &mut arrays);
             
             for (_, elements) in arrays {
                 for elem in elements {
@@ -769,20 +825,19 @@ impl RustValidator {
             }
         }
 
-        // 2. Run elements check (parallel if tasks are many, otherwise sequential)
         let has_error = if should_use_parallel(tasks.len()) {
             tasks.par_iter().any(|task| !task.validator.is_valid(task.item_val))
         } else {
             tasks.iter().any(|task| !task.validator.is_valid(task.item_val))
         };
         if has_error {
-            return Ok(false);
+            return false;
         }
 
-        // 3. Fallback to main validation check
-        Ok(self.compiled.is_valid(&instance_json))
+        self.compiled.is_valid(instance_json)
     }
 }
+
 
 #[pyfunction]
 fn validate(py: Python<'_>, instance: &Bound<'_, PyAny>, schema: &Bound<'_, PyAny>) -> PyResult<()> {
